@@ -11,6 +11,7 @@ export default class Matcher {
   #group = "SearchAst";
   #matchId: number;
   #denops: Denops;
+  #selector = "";
 
   constructor(denops: Denops) {
     this.#denops = denops;
@@ -24,18 +25,20 @@ export default class Matcher {
     );
   };
 
-  getCurrentBufCode = async () => {
+  #getCurrentBufCode = async () => {
     const bufnr = await fn.bufnr(this.#denops);
     const buflines = await fn.getbufline(this.#denops, bufnr, 1, "$");
     assert(buflines, is.ArrayOf(is.String));
 
     return buflines.join("\n");
   };
-  getCurrentBufAst = async () => {
-    const code = await this.getCurrentBufCode();
+
+  #getCurrentBufAst = async () => {
+    const code = await this.#getCurrentBufCode();
     return parseToAst(code);
   };
-  requireSelectorInput = async () => {
+
+  #requireSelectorInput = async () => {
     try {
       const selector = await fn.input(this.#denops, "input AST selector: ");
       assert(selector, is.String);
@@ -45,24 +48,13 @@ export default class Matcher {
     }
   };
 
-  reset = async () => {
-    if (this.#matchId < 0) return;
-    await fn.matchdelete(this.#denops, this.#matchId);
-    this.#matchId = -1;
-  };
-
-  highlight = async () => {
-    await this.reset();
-
-    const selector = await this.requireSelectorInput();
+  #highlightSelector = async () => {
+    const selector = this.#selector;
+    await this.#resetHighlight();
     if (selector.length === 0) return;
 
-    const ast = await this.getCurrentBufAst();
+    const ast = await this.#getCurrentBufAst();
 
-    await this.highlightSelector(ast, selector);
-  };
-
-  highlightSelector = async (ast: TSESTree.Program, selector: string) => {
     const matchingNodes = getMatchingNodes(ast, selector);
     if (matchingNodes.length === 0) {
       console.warn("no matching");
@@ -78,5 +70,29 @@ export default class Matcher {
       ]);
 
     this.#matchId = await fn.matchaddpos(this.#denops, this.#group, pos);
+  };
+
+  #resetHighlight = async () => {
+    if (this.#matchId > 0) {
+      await fn.matchdelete(this.#denops, this.#matchId);
+    }
+    this.#matchId = -1;
+  };
+
+  reset = async () => {
+    this.#selector = "";
+    await this.#resetHighlight();
+  };
+
+  highlight = async (selector: unknown) => {
+    selector = await this.#requireSelectorInput();
+    assert(selector, is.String);
+    this.#selector = selector;
+
+    await this.#highlightSelector();
+  };
+
+  reHighlight = async () => {
+    await this.#highlightSelector();
   };
 }
