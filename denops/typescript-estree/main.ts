@@ -1,30 +1,22 @@
 import type { Entrypoint } from "jsr:@denops/std";
 
-import Matcher from "./matcher.ts";
-import { getCurrentBufAst, requireSelectorInput } from "./utils.ts";
+import Matcher from "./classes/matcher.ts";
 
 export const main: Entrypoint = (denops) => {
   const matcher = new Matcher(denops);
   denops.dispatcher = {
-    async disableHighlightSelector(): Promise<void> {
-      await matcher.reset();
+    async highlight(): Promise<void> {
+      await matcher.highlight();
     },
-    async highlightSelector(): Promise<void> {
+    async resetHighlight(): Promise<void> {
       await matcher.reset();
-
-      const selector = await requireSelectorInput(denops);
-      if (selector.length === 0) return;
-
-      const ast = await getCurrentBufAst(denops);
-
-      await matcher.highlightSelector(ast, selector);
     },
   };
 
   denops.cmd(
-    `command! H call denops#request('${denops.name}', 'highlightSelector', [])`,
+    `command! H call denops#request('${denops.name}', 'highlight', [])`,
   );
   denops.cmd(
-    `command! D call denops#request('${denops.name}', 'disableHighlightSelector', [])`,
+    `command! D call denops#request('${denops.name}', 'resetHighlight', [])`,
   );
 };
