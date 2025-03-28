@@ -9,8 +9,10 @@
 local spec = {
   "ediezindell/denops-typescript-estree.vim",
   ft = {
+    "javascript",
     "javascriptreact",
     "javascript.jsx",
+    "typescript",
     "typescriptreact",
     "typescript.tsx",
     "astro",
