@@ -20,7 +20,6 @@ local spec = {
   dependencies = {
     "vim-denops/denops.vim",
   },
-  event = "BufEnter",
   init = function()
     vim.api.nvim_create_autocmd({
       "TextChanged",
