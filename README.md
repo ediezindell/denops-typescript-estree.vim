@@ -9,8 +9,10 @@
 local spec = {
   "ediezindell/denops-typescript-estree.vim",
   ft = {
+    "javascript",
     "javascriptreact",
     "javascript.jsx",
+    "typescript",
     "typescriptreact",
     "typescript.tsx",
     "astro",
@@ -18,7 +20,6 @@ local spec = {
   dependencies = {
     "vim-denops/denops.vim",
   },
-  event = "BufEnter",
   init = function()
     vim.api.nvim_create_autocmd({
       "TextChanged",
