@@ -3,12 +3,7 @@ import * as fn from "jsr:@denops/std/function";
 
 import { TSESTree } from "npm:@typescript-eslint/typescript-estree";
 
-import { getCurrentBufAst } from "../lib/utils.ts";
-
-type Pos = {
-  line: number;
-  col: number;
-};
+import { getCurrentBufAst, getCurrentBufCode } from "../lib/utils.ts";
 
 export default class Inspecter {
   #denops: Denops;
@@ -17,57 +12,66 @@ export default class Inspecter {
     this.#denops = denops;
   }
 
-  #getCursorPosition = async (): Promise<Pos> => {
+  #getCursorPosition = async () => {
     const [, line, col] = await fn.getcurpos(this.#denops);
-    return {
-      line,
-      col,
-    };
+    const code = await getCurrentBufCode(this.#denops);
+    const pos = code.split("\n").slice(0, line).join("\n").length + col;
+    return pos;
   };
 
-  // #searchNode = (ast: TSESTree.Node, pos: Pos): TSESTree.Node[] => {
-  //   return [];
-  // };
+  #findAstNodeAtPosition = async (pos: number) => {
+    const ast = await getCurrentBufAst(this.#denops);
+    const nodes = this.#findNodesAtPosition(ast, pos);
+    return nodes;
+  };
 
-  findAstNodeAtPosition(
-    node: TSESTree.Node,
-    position: number,
-  ): TSESTree.Node | null {
-    if (!("range" in node)) return null;
+  #findNodesAtPosition = (ast: TSESTree.Program, position: number) => {
+    const nodes: TSESTree.Node[] = [];
 
-    if (!(node.range[0] <= position && position <= node.range[1])) {
-      return null;
-    }
-    let closestMatch: TSESTree.Node | null = node;
+    const traverse = (node: TSESTree.Node) => {
+      if (!node.range) return;
+      nodes.push(node);
 
-    for (const key in node) {
-      const child = node[key as keyof TSESTree.Node];
-
-      if (typeof child === "object" && child !== null) {
+      for (const key in node) {
+        const child = node[key as keyof typeof node];
         if (Array.isArray(child)) {
-          for (const item of child) {
-            if (typeof item === "object" && item !== null && "range" in item) {
-              const match = this.findAstNodeAtPosition(item, position);
-              if (match) closestMatch = match;
+          for (const subChild of child) {
+            if (
+              subChild &&
+              typeof subChild === "object" &&
+              "range" in subChild
+            ) {
+              traverse(subChild);
             }
           }
-        } else if ("range" in child) {
-          const match = this.findAstNodeAtPosition(child, position);
-          if (match) closestMatch = match;
+        } else if (child && typeof child === "object" && "range" in child) {
+          traverse(child);
         }
       }
-    }
+    };
 
-    return closestMatch;
-  }
+    traverse(ast);
+
+    return nodes
+      .map((node) => {
+        const [start, end] = node.range;
+        return {
+          type: node.type,
+          start,
+          end,
+        };
+      })
+      .filter(({ start, end }) => {
+        return start <= position && position <= end;
+      })
+      .toSorted((a, b) => {
+        return a.start === b.start ? a.end - b.end : a.start - b.start;
+      });
+  };
 
   inspect = async () => {
     const pos = await this.#getCursorPosition();
-    console.log(pos);
-    const ast = await getCurrentBufAst(this.#denops);
-    const node = this.findAstNodeAtPosition(ast, 4);
-    console.log(JSON.stringify(node, undefined, 2));
-    // this.#searchNode(ast, pos);
-    // console.log(ast);
+    const matchingNodes = await this.#findAstNodeAtPosition(pos);
+    console.log(matchingNodes);
   };
 }

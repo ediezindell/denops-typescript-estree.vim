@@ -16,3 +16,9 @@ export const getCurrentBufAst = async (denops: Denops) => {
   const code = await getCurrentBufCode(denops);
   return parseToAst(code);
 };
+
+export const getSourceFilePath = async (denops: Denops) => {
+  const path = await fn.expand(denops, "%:p");
+  assert(path, is.String);
+  return path;
+};
