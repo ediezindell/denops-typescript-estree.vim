@@ -1,11 +1,10 @@
 import type { Denops } from "jsr:@denops/std";
 import * as fn from "jsr:@denops/std/function";
 
-import { TSESTree } from "npm:@typescript-eslint/typescript-estree";
 import { getMatchingNodes } from "../lib/ast.ts";
 import { assert, is } from "jsr:@core/unknownutil";
 
-import { parseToAst } from "../lib/ast.ts";
+import { getCurrentBufAst } from "../lib/utils.ts";
 
 export default class Matcher {
   #group = "SearchAst";
@@ -25,19 +24,6 @@ export default class Matcher {
     );
   };
 
-  #getCurrentBufCode = async () => {
-    const bufnr = await fn.bufnr(this.#denops);
-    const buflines = await fn.getbufline(this.#denops, bufnr, 1, "$");
-    assert(buflines, is.ArrayOf(is.String));
-
-    return buflines.join("\n");
-  };
-
-  #getCurrentBufAst = async () => {
-    const code = await this.#getCurrentBufCode();
-    return parseToAst(code);
-  };
-
   #requireSelectorInput = async () => {
     try {
       const selector = await fn.input(this.#denops, "input AST selector: ");
@@ -48,12 +34,12 @@ export default class Matcher {
     }
   };
 
-  #highlightSelector = async () => {
-    const selector = this.#selector;
+  #highlightSelector = async (selector: string) => {
     await this.#resetHighlight();
+    this.#selector = selector;
     if (selector.length === 0) return;
 
-    const ast = await this.#getCurrentBufAst();
+    const ast = await getCurrentBufAst(this.#denops);
 
     const matchingNodes = getMatchingNodes(ast, selector);
     if (matchingNodes.length === 0) {
@@ -87,12 +73,14 @@ export default class Matcher {
   highlight = async (selector: unknown) => {
     selector = await this.#requireSelectorInput();
     assert(selector, is.String);
-    this.#selector = selector;
-
-    await this.#highlightSelector();
+    await this.#highlightSelector(selector);
   };
 
   reHighlight = async () => {
-    await this.#highlightSelector();
+    await this.#highlightSelector(this.#selector);
   };
+
+  focusPrev = async () => {};
+  focusNext = async () => {};
+  #focus = async () => {};
 }
