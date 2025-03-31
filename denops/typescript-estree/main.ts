@@ -12,6 +12,9 @@ export const main: Entrypoint = (denops) => {
     reHighlight: matcher.reHighlight,
     resetHighlight: matcher.reset,
 
+    focusPrev: matcher.focusPrev,
+    focusNext: matcher.focusNext,
+
     inspect: inspecter.inspect,
   };
 
@@ -23,6 +26,13 @@ export const main: Entrypoint = (denops) => {
   );
   denops.cmd(
     `command! D call denops#request('${denops.name}', 'resetHighlight', [])`,
+  );
+
+  denops.cmd(
+    `command! FP call denops#request('${denops.name}', 'focusPrev', [])`,
+  );
+  denops.cmd(
+    `command! FN call denops#request('${denops.name}', 'focusNext', [])`,
   );
 
   denops.cmd(`command! I call denops#request('${denops.name}', 'inspect', [])`);
