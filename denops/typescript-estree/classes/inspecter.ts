@@ -21,6 +21,8 @@ export default class Inspecter {
 
   #findAstNodeAtPosition = async (pos: number) => {
     const ast = await getCurrentBufAst(this.#denops);
+    if (!ast) return [];
+
     const nodes = this.#findNodesAtPosition(ast, pos);
     return nodes;
   };

@@ -40,6 +40,7 @@ export default class Matcher {
     if (selector.length === 0) return;
 
     const ast = await getCurrentBufAst(this.#denops);
+    if (!ast) return;
 
     const matchingNodes = getMatchingNodes(ast, selector);
     if (matchingNodes.length === 0) {
