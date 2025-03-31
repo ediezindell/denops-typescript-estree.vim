@@ -24,7 +24,7 @@ local spec = {
     { "<space>h", "<Cmd>TSESTreeHighlight<CR>",               desc = "highlight selector" },
     { "<space>d", "<Cmd>TSESTreeHighlightResetHighlight<CR>", desc = "reset highlight" },
   },
-  init = function()
+  config = function()
     vim.api.nvim_create_autocmd({
       "TextChanged",
       "TextChangedI",
