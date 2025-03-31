@@ -1,4 +1,4 @@
-import type { Entrypoint } from "jsr:@denops/std";
+import type { Dispatcher, Entrypoint } from "jsr:@denops/std";
 
 import Matcher from "./classes/matcher.ts";
 import Inspecter from "./classes/inspecter.ts";
@@ -7,7 +7,7 @@ export const main: Entrypoint = (denops) => {
   const matcher = new Matcher(denops);
   const inspecter = new Inspecter(denops);
 
-  denops.dispatcher = {
+  const dispatcher = {
     highlight: matcher.highlight,
     reHighlight: matcher.reHighlight,
     resetHighlight: matcher.reset,
@@ -16,24 +16,23 @@ export const main: Entrypoint = (denops) => {
     focusNext: matcher.focusNext,
 
     inspect: inspecter.inspect,
+  } as const satisfies Dispatcher;
+  denops.dispatcher = dispatcher;
+
+  const registerCommand = (
+    command: string,
+    endpoint: keyof typeof dispatcher,
+  ) => {
+    denops.cmd(
+      `command! ${command} call denops#request('${denops.name}', '${endpoint}', [])`,
+    );
   };
+  registerCommand("TSESTreeHighlight", "highlight");
+  registerCommand("TSESTreeReHighlight", "reHighlight");
+  registerCommand("TSESTreeResetHighlight", "resetHighlight");
 
-  denops.cmd(
-    `command! H call denops#request('${denops.name}', 'highlight', [])`,
-  );
-  denops.cmd(
-    `command! R call denops#request('${denops.name}', 'reHighlight', [])`,
-  );
-  denops.cmd(
-    `command! D call denops#request('${denops.name}', 'resetHighlight', [])`,
-  );
+  registerCommand("TSESTreeFocusPrev", "focusPrev");
+  registerCommand("TSESTreeFocusNext", "focusNext");
 
-  denops.cmd(
-    `command! FP call denops#request('${denops.name}', 'focusPrev', [])`,
-  );
-  denops.cmd(
-    `command! FN call denops#request('${denops.name}', 'focusNext', [])`,
-  );
-
-  denops.cmd(`command! I call denops#request('${denops.name}', 'inspect', [])`);
+  registerCommand("TSESTreeInspect", "inspect");
 };
