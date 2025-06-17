@@ -44,22 +44,27 @@ export default class Matcher {
     if (selector.length === 0) return;
 
     const ast = await getCurrentBufAst(this.#denops);
-    if (!ast) return;
+    if (!ast) {
+      await this.#denops.cmd(`echohl WarningMsg | echo "Failed to parse current buffer" | echohl None`);
+      return;
+    }
 
     const matchingNodes = getMatchingNodes(ast, selector);
     if (matchingNodes.length === 0) {
-      console.warn("no matching");
+      await this.#denops.cmd(`echo "No matches found for selector: ${selector}"`);
       return;
     }
 
     this.#pos = matchingNodes
       .filter(({ loc }) => loc)
-      .map(({ loc }) => loc)
+      .map(({ loc }) => loc!)
       .map(({ start, end }) => [
-        start.line,
-        start.column + 1,
-        end.column - start.column,
+        start.line + 1, // Convert 0-based to 1-based line
+        start.column + 1, // Convert 0-based to 1-based column
+        Math.max(1, end.column - start.column), // Ensure minimum length of 1
       ]);
+    
+    // Sort positions for navigation
     this.#pos.sort((a, b) => {
       if (a[0] !== b[0]) {
         return a[0] - b[0];
@@ -71,11 +76,19 @@ export default class Matcher {
     });
 
     this.#matchId = await fn.matchaddpos(this.#denops, this.#group, this.#pos);
+    
+    // Show match count
+    await this.#denops.cmd(`echo "Found ${matchingNodes.length} matches"`);
   };
 
   #resetHighlight = async () => {
     if (this.#matchId > 0) {
-      await fn.matchdelete(this.#denops, this.#matchId);
+      try {
+        await fn.matchdelete(this.#denops, this.#matchId);
+      } catch (error) {
+        // Match might already be deleted, ignore error
+        console.debug("Failed to delete match:", error);
+      }
     }
     this.#matchId = -1;
     this.#pos = [];
@@ -86,16 +99,28 @@ export default class Matcher {
     await this.#resetHighlight();
   };
 
-  highlight = async (selector: unknown) => {
-    selector = await this.#requireSelectorInput();
-    assert(selector, is.String);
-    await this.#highlightSelector(selector);
-
-    await this.focusNext();
+  highlight = async () => {
+    const selector = await this.#requireSelectorInput();
+    if (!selector) return;
+    
+    try {
+      await this.#highlightSelector(selector);
+      await this.focusNext();
+    } catch (error) {
+      console.error("Failed to highlight selector:", error);
+      await this.#denops.cmd(`echohl ErrorMsg | echo "Invalid selector: ${selector}" | echohl None`);
+    }
   };
 
   reHighlight = async () => {
-    await this.#highlightSelector(this.#selector);
+    if (!this.#selector) return;
+    
+    try {
+      await this.#highlightSelector(this.#selector);
+    } catch (error) {
+      console.error("Failed to re-highlight:", error);
+      await this.#denops.cmd(`echohl ErrorMsg | echo "Failed to re-highlight" | echohl None`);
+    }
   };
 
   focusPrev = async () => {
@@ -118,10 +143,16 @@ export default class Matcher {
   };
 
   #focus = async (index: number) => {
-    if (index < 0) return;
+    if (index < 0 || index >= this.#pos.length) {
+      await this.#denops.cmd(`echo "No more matches"`);
+      return;
+    }
 
     const pos = this.#pos[index];
     const [line, column] = pos;
     await fn.cursor(this.#denops, line, column);
+    
+    // Show current match position
+    await this.#denops.cmd(`echo "Match ${index + 1}/${this.#pos.length}"`);
   };
 }

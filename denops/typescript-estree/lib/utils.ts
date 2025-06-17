@@ -13,8 +13,17 @@ export const getCurrentBufCode = async (denops: Denops) => {
 };
 
 export const getCurrentBufAst = async (denops: Denops) => {
-  const code = await getCurrentBufCode(denops);
-  return parseToAst(code);
+  try {
+    const code = await getCurrentBufCode(denops);
+    if (!code.trim()) {
+      console.warn("Buffer is empty");
+      return null;
+    }
+    return parseToAst(code);
+  } catch (error) {
+    console.error("Failed to get current buffer AST:", error);
+    return null;
+  }
 };
 
 export const getSourceFilePath = async (denops: Denops) => {
