@@ -1,0 +1,322 @@
+*typescript-estree.txt*	AST manipulation for JavaScript/TypeScript	*typescript-estree*
+
+Author: ediezindell
+License: Same terms as Vim itself (see |license|)
+
+==============================================================================
+CONTENTS						*typescript-estree-contents*
+
+1. Introduction				|typescript-estree-introduction|
+2. Requirements				|typescript-estree-requirements|
+3. Installation				|typescript-estree-installation|
+4. Commands				|typescript-estree-commands|
+5. Functions				|typescript-estree-functions|
+6. Configuration			|typescript-estree-configuration|
+7. Usage Examples			|typescript-estree-examples|
+8. ESQuery Selectors			|typescript-estree-selectors|
+9. Troubleshooting			|typescript-estree-troubleshooting|
+10. Changelog				|typescript-estree-changelog|
+
+==============================================================================
+INTRODUCTION					*typescript-estree-introduction*
+
+denops-typescript-estree.vim is a Neovim plugin that provides AST (Abstract
+Syntax Tree) manipulation, search, and highlighting capabilities using the
+same parser as ESLint (@typescript-eslint/typescript-estree).
+
+Features:
+- Search and highlight AST nodes using ESQuery selectors
+- Inspect AST nodes at cursor position
+- Navigate between matching nodes
+- Support for JavaScript, TypeScript, JSX, TSX, and Astro files
+- Real-time highlighting updates
+
+==============================================================================
+REQUIREMENTS					*typescript-estree-requirements*
+
+- Neovim 0.8.0 or later
+- Deno 1.20.0 or later
+- denops.vim plugin
+
+The plugin uses denops.vim to run TypeScript code in Deno runtime.
+
+==============================================================================
+INSTALLATION					*typescript-estree-installation*
+
+Using lazy.nvim: >lua
+	{
+	  "ediezindell/denops-typescript-estree.vim",
+	  ft = {
+	    "javascript", "javascriptreact", "javascript.jsx",
+	    "typescript", "typescriptreact", "typescript.tsx",
+	    "astro",
+	  },
+	  dependencies = { "vim-denops/denops.vim" },
+	  keys = {
+	    { "<space>h", "<Cmd>TSESTreeHighlight<CR>", desc = "highlight selector" },
+	    { "<space>d", "<Cmd>TSESTreeHighlightResetHighlight<CR>", desc = "reset highlight" },
+	  },
+	  config = function()
+	    vim.api.nvim_create_autocmd({
+	      "TextChanged", "TextChangedI",
+	    }, {
+	      command = "TSESTreeReHighlight",
+	      pattern = "*.{js,jsx,ts,tsx,astro}",
+	      group = vim.api.nvim_create_augroup("TSESTreeReHighlight", { clear = true }),
+	    })
+	  end,
+	}
+<
+
+Using vim-plug: >vim
+	Plug 'vim-denops/denops.vim'
+	Plug 'ediezindell/denops-typescript-estree.vim'
+<
+
+==============================================================================
+COMMANDS					*typescript-estree-commands*
+
+						*:TSESTreeHighlight*
+:TSESTreeHighlight
+		Prompt for an ESQuery selector and highlight matching AST nodes.
+		The selector uses CSS-like syntax to query the AST.
+		
+		Example: >
+			:TSESTreeHighlight
+			" Enter: FunctionDeclaration
+<
+						*:TSESTreeReHighlight*
+:TSESTreeReHighlight
+		Re-highlight using the last selector. Useful after text changes
+		to update the highlights.
+
+						*:TSESTreeResetHighlight*
+:TSESTreeResetHighlight
+		Clear all highlights created by the plugin.
+
+						*:TSESTreeFocusPrev*
+:TSESTreeFocusPrev
+		Navigate to the previous matching node. The cursor will move to
+		the start of the previous highlighted node.
+
+						*:TSESTreeFocusNext*
+:TSESTreeFocusNext
+		Navigate to the next matching node. The cursor will move to
+		the start of the next highlighted node.
+
+						*:TSESTreeInspect*
+:TSESTreeInspect
+		Show AST node information at the cursor position. Displays the
+		node type and position range.
+
+==============================================================================
+FUNCTIONS					*typescript-estree-functions*
+
+The plugin provides the following denops functions that can be called
+programmatically:
+
+denops#request('typescript-estree', 'highlight', [])
+		Same as |:TSESTreeHighlight|
+
+denops#request('typescript-estree', 'reHighlight', [])
+		Same as |:TSESTreeReHighlight|
+
+denops#request('typescript-estree', 'resetHighlight', [])
+		Same as |:TSESTreeResetHighlight|
+
+denops#request('typescript-estree', 'focusPrev', [])
+		Same as |:TSESTreeFocusPrev|
+
+denops#request('typescript-estree', 'focusNext', [])
+		Same as |:TSESTreeFocusNext|
+
+denops#request('typescript-estree', 'inspect', [])
+		Same as |:TSESTreeInspect|
+
+==============================================================================
+CONFIGURATION					*typescript-estree-configuration*
+
+The plugin works out of the box without configuration. However, you can
+customize the behavior:
+
+Highlight Group~
+The plugin uses the "SearchAst" highlight group. You can customize it: >vim
+	highlight SearchAst guifg=#272822 guibg=#f92672
+<
+
+Auto Re-highlighting~
+To automatically re-highlight when text changes: >vim
+	autocmd TextChanged,TextChangedI *.{js,jsx,ts,tsx,astro} TSESTreeReHighlight
+<
+
+Key Mappings~
+Suggested key mappings: >vim
+	nnoremap <leader>ah <Cmd>TSESTreeHighlight<CR>
+	nnoremap <leader>ar <Cmd>TSESTreeReHighlight<CR>
+	nnoremap <leader>ax <Cmd>TSESTreeResetHighlight<CR>
+	nnoremap <leader>an <Cmd>TSESTreeFocusNext<CR>
+	nnoremap <leader>ap <Cmd>TSESTreeFocusPrev<CR>
+	nnoremap <leader>ai <Cmd>TSESTreeInspect<CR>
+<
+
+==============================================================================
+USAGE EXAMPLES					*typescript-estree-examples*
+
+Basic Usage~
+1. Open a JavaScript/TypeScript file
+2. Run |:TSESTreeHighlight|
+3. Enter a selector (e.g., "FunctionDeclaration")
+4. Use |:TSESTreeFocusNext| and |:TSESTreeFocusPrev| to navigate
+5. Use |:TSESTreeInspect| to examine nodes at cursor
+
+Common Selectors~
+						*typescript-estree-common-selectors*
+FunctionDeclaration		All function declarations
+VariableDeclaration		All variable declarations
+CallExpression			All function calls
+Identifier			All identifiers
+TSInterfaceDeclaration		TypeScript interfaces
+ArrowFunctionExpression		Arrow functions
+
+Advanced Examples~
+Find console.log statements: >
+	CallExpression[callee.object.name="console"]
+<
+Find async functions: >
+	FunctionDeclaration[async=true]
+<
+Find React hooks: >
+	CallExpression[callee.name=/^use/]
+<
+Find var declarations (should use let/const): >
+	VariableDeclaration[kind="var"]
+<
+Find loose equality (should use ===): >
+	BinaryExpression[operator="=="]
+<
+
+Workflow Example~
+1. Highlight all functions: >
+	:TSESTreeHighlight
+	FunctionDeclaration
+<
+2. Navigate through them: >
+	:TSESTreeFocusNext
+	:TSESTreeFocusNext
+<
+3. Inspect current function: >
+	:TSESTreeInspect
+<
+4. Clear highlights: >
+	:TSESTreeResetHighlight
+<
+
+==============================================================================
+ESQUERY SELECTORS				*typescript-estree-selectors*
+
+The plugin uses ESQuery syntax for selecting AST nodes. ESQuery uses
+CSS-like selectors to query JavaScript AST.
+
+Basic Selectors~
+NodeType			Select all nodes of type NodeType
+[attr]				Nodes with attribute attr
+[attr="value"]			Nodes where attr equals "value"
+[attr*="substring"]		Nodes where attr contains "substring"
+[attr^="prefix"]		Nodes where attr starts with "prefix"
+[attr$="suffix"]		Nodes where attr ends with "suffix"
+[attr=/regex/]			Nodes where attr matches regex
+
+Combinators~
+A > B				B is a direct child of A
+A B				B is a descendant of A
+A + B				B immediately follows A
+A ~ B				B follows A (not necessarily immediately)
+
+Pseudo-selectors~
+:first-child			First child node
+:last-child			Last child node
+:nth-child(n)			nth child node
+:has(selector)			Nodes that contain matching descendants
+:not(selector)			Nodes that don't match selector
+
+Common AST Node Types~
+						*typescript-estree-node-types*
+JavaScript/TypeScript:
+Program				Root node
+FunctionDeclaration		Function declarations
+ArrowFunctionExpression		Arrow functions
+VariableDeclaration		Variable declarations
+CallExpression			Function calls
+MemberExpression		Property access (obj.prop)
+BinaryExpression		Binary operations (+, -, etc.)
+IfStatement			If statements
+ForStatement			For loops
+ReturnStatement			Return statements
+Identifier			Identifiers/variable names
+Literal				Literal values
+
+TypeScript Specific:
+TSInterfaceDeclaration		Interface declarations
+TSTypeAliasDeclaration		Type aliases
+TSEnumDeclaration		Enum declarations
+TSModuleDeclaration		Module declarations
+TSAnyKeyword			any type keyword
+TSNonNullExpression		Non-null assertions (!)
+
+JSX/React:
+JSXElement			JSX elements
+JSXAttribute			JSX attributes
+JSXExpressionContainer		JSX expressions
+
+==============================================================================
+TROUBLESHOOTING					*typescript-estree-troubleshooting*
+
+Commands Not Found~
+If the commands are not available:
+1. Check if denops.vim is installed and working: >
+	:echo denops#server#status()
+<
+2. Check if Deno is installed: >
+	:!deno --version
+<
+3. Manually load the plugin: >
+	:call denops#plugin#load('typescript-estree', '/path/to/plugin')
+<
+
+No Highlights Appearing~
+1. Check the file type: >
+	:echo &filetype
+<
+2. Test with a simple selector like "Identifier"
+3. Check for syntax errors in your code
+4. Use |:TSESTreeInspect| to verify AST parsing
+
+Invalid Selector Errors~
+- Check the ESQuery documentation for correct syntax
+- Start with simple selectors and build complexity gradually
+- Use |:TSESTreeInspect| to understand the AST structure
+
+Performance Issues~
+- Use more specific selectors for large files
+- Disable auto-rehighlight for very large files
+- Test with smaller code samples first
+
+Parse Errors~
+- Check for syntax errors in your JavaScript/TypeScript code
+- Ensure the file type is correctly detected
+- Try with a minimal test file
+
+==============================================================================
+CHANGELOG					*typescript-estree-changelog*
+
+v1.0.0~
+- Initial release
+- Basic AST highlighting and navigation
+- Support for JavaScript, TypeScript, JSX, TSX, and Astro
+- ESQuery selector support
+- Real-time highlighting updates
+- Comprehensive error handling
+- Performance optimizations
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:
