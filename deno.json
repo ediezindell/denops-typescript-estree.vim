@@ -3,7 +3,9 @@
     "@core/unknownutil": "jsr:@core/unknownutil@^4.3.0",
     "@denops/std": "jsr:@denops/std@^7.5.0",
     "@types/eslint-utils": "npm:@types/eslint-utils@^3.0.5",
+    "@types/esquery": "npm:@types/esquery@^1.5.4",
     "@typescript-eslint/typescript-estree": "npm:@typescript-eslint/typescript-estree@^8.28.0",
-    "eslint-utils": "npm:eslint-utils@^3.0.0"
+    "eslint-utils": "npm:eslint-utils@^3.0.0",
+    "esquery": "npm:esquery@^1.6.0"
   }
 }

@@ -45,25 +45,29 @@ export default class Matcher {
 
     const ast = await getCurrentBufAst(this.#denops);
     if (!ast) {
-      await this.#denops.cmd(`echohl WarningMsg | echo "Failed to parse current buffer" | echohl None`);
+      await this.#denops.cmd(
+        `echohl WarningMsg | echo "Failed to parse current buffer" | echohl None`,
+      );
       return;
     }
 
     const matchingNodes = getMatchingNodes(ast, selector);
     if (matchingNodes.length === 0) {
-      await this.#denops.cmd(`echo "No matches found for selector: ${selector}"`);
+      await this.#denops.cmd(
+        `echo "No matches found for selector: ${selector}"`,
+      );
       return;
     }
 
     this.#pos = matchingNodes
       .filter(({ loc }) => loc)
-      .map(({ loc }) => loc!)
+      .map(({ loc }) => loc)
       .map(({ start, end }) => [
-        start.line + 1, // Convert 0-based to 1-based line
+        start.line,
         start.column + 1, // Convert 0-based to 1-based column
         Math.max(1, end.column - start.column), // Ensure minimum length of 1
       ]);
-    
+
     // Sort positions for navigation
     this.#pos.sort((a, b) => {
       if (a[0] !== b[0]) {
@@ -76,7 +80,7 @@ export default class Matcher {
     });
 
     this.#matchId = await fn.matchaddpos(this.#denops, this.#group, this.#pos);
-    
+
     // Show match count
     await this.#denops.cmd(`echo "Found ${matchingNodes.length} matches"`);
   };
@@ -102,24 +106,28 @@ export default class Matcher {
   highlight = async () => {
     const selector = await this.#requireSelectorInput();
     if (!selector) return;
-    
+
     try {
       await this.#highlightSelector(selector);
       await this.focusNext();
     } catch (error) {
       console.error("Failed to highlight selector:", error);
-      await this.#denops.cmd(`echohl ErrorMsg | echo "Invalid selector: ${selector}" | echohl None`);
+      await this.#denops.cmd(
+        `echohl ErrorMsg | echo "Invalid selector: ${selector}" | echohl None`,
+      );
     }
   };
 
   reHighlight = async () => {
     if (!this.#selector) return;
-    
+
     try {
       await this.#highlightSelector(this.#selector);
     } catch (error) {
       console.error("Failed to re-highlight:", error);
-      await this.#denops.cmd(`echohl ErrorMsg | echo "Failed to re-highlight" | echohl None`);
+      await this.#denops.cmd(
+        `echohl ErrorMsg | echo "Failed to re-highlight" | echohl None`,
+      );
     }
   };
 
@@ -151,7 +159,7 @@ export default class Matcher {
     const pos = this.#pos[index];
     const [line, column] = pos;
     await fn.cursor(this.#denops, line, column);
-    
+
     // Show current match position
     await this.#denops.cmd(`echo "Match ${index + 1}/${this.#pos.length}"`);
   };

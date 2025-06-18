@@ -683,17 +683,10 @@
       "jsr:@core/unknownutil@^4.3.0",
       "jsr:@denops/std@^7.5.0",
       "npm:@types/eslint-utils@^3.0.5",
+      "npm:@types/esquery@^1.5.4",
       "npm:@typescript-eslint/typescript-estree@^8.28.0",
-      "npm:eslint-utils@3"
-    ],
-    "packageJson": {
-      "dependencies": [
-        "npm:@types/eslint-utils@^3.0.5",
-        "npm:@types/esquery@^1.5.4",
-        "npm:@typescript-eslint/typescript-estree@^8.28.0",
-        "npm:eslint-utils@3",
-        "npm:esquery@^1.6.0"
-      ]
-    }
+      "npm:eslint-utils@3",
+      "npm:esquery@^1.6.0"
+    ]
   }
 }

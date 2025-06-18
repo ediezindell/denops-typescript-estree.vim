@@ -1,14 +1,17 @@
-import { parse, TSESTree } from "@typescript-eslint/typescript-estree";
-import esquery from "esquery";
+import {
+  parse,
+  TSESTree,
+} from "npm:@typescript-eslint/typescript-estree@^8.28.0";
+import * as esquery from "npm:esquery@^1.6.0";
 
 export const parseToAst = (code: string) => {
   try {
-    return parse(code, { 
-      jsx: true, 
-      loc: true, 
+    return parse(code, {
+      jsx: true,
+      loc: true,
       range: true,
       errorOnUnknownASTType: false,
-      errorOnTypeScriptSyntacticAndSemanticIssues: false
+      errorOnTypeScriptSyntacticAndSemanticIssues: false,
     });
   } catch (error) {
     console.error("Failed to parse AST:", error);
@@ -19,7 +22,7 @@ export const parseToAst = (code: string) => {
 export const getMatchingNodes = (ast: TSESTree.Program, selector: string) => {
   try {
     // Type assertion needed due to AST type differences between typescript-eslint and estree
-    return esquery(ast as any, selector) as TSESTree.Node[];
+    return esquery.default(ast as any, selector) as TSESTree.Node[];
   } catch (error) {
     console.error("Invalid selector:", selector, error);
     throw new Error(`Invalid ESQuery selector: ${selector}`);
@@ -39,12 +42,12 @@ export const findNodesAtPosition = (
 
   const traverse = (node: TSESTree.Node) => {
     if (!node.range) return;
-    
+
     const [start, end] = node.range;
-    
+
     // Early exit if position is outside this node's range
     if (position < start || position > end) return;
-    
+
     // This node contains the position
     matchingNodes.push({
       type: node.type,
