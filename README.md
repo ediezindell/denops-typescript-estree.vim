@@ -1,13 +1,17 @@
 # denops-typescript-estree.vim
 
-A Neovim plugin that provides AST (Abstract Syntax Tree) manipulation, search, and highlighting capabilities using the same parser as ESLint (@typescript-eslint/typescript-estree).
+A Neovim plugin that provides AST (Abstract Syntax Tree) manipulation, search,
+and highlighting capabilities using the same parser as ESLint
+(@typescript-eslint/typescript-estree).
 
 ## Features
 
-- 🔍 **AST Search & Highlight**: Search and highlight AST nodes using ESQuery selectors
+- 🔍 **AST Search & Highlight**: Search and highlight AST nodes using ESQuery
+  selectors
 - 🎯 **Cursor Inspection**: Inspect AST nodes at cursor position
 - 🚀 **Navigation**: Navigate between matching nodes
-- 📝 **Multi-language Support**: JavaScript, TypeScript, JSX, TSX, and Astro files
+- 📝 **Multi-language Support**: JavaScript, TypeScript, JSX, TSX, and Astro
+  files
 - ⚡ **Real-time Updates**: Automatic re-highlighting on text changes
 
 ## Installation
@@ -50,14 +54,14 @@ return spec
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `:TSESTreeHighlight` | Prompt for ESQuery selector and highlight matching nodes |
-| `:TSESTreeReHighlight` | Re-highlight using the last selector (useful after text changes) |
-| `:TSESTreeResetHighlight` | Clear all highlights |
-| `:TSESTreeFocusPrev` | Navigate to previous matching node |
-| `:TSESTreeFocusNext` | Navigate to next matching node |
-| `:TSESTreeInspect` | Show AST node information at cursor position |
+| Command                   | Description                                                      |
+| ------------------------- | ---------------------------------------------------------------- |
+| `:TSESTreeHighlight`      | Prompt for ESQuery selector and highlight matching nodes         |
+| `:TSESTreeReHighlight`    | Re-highlight using the last selector (useful after text changes) |
+| `:TSESTreeResetHighlight` | Clear all highlights                                             |
+| `:TSESTreeFocusPrev`      | Navigate to previous matching node                               |
+| `:TSESTreeFocusNext`      | Navigate to next matching node                                   |
+| `:TSESTreeInspect`        | Show AST node information at cursor position                     |
 
 ## Usage Examples
 
@@ -142,15 +146,18 @@ return spec
 
 ## ESQuery Selector Reference
 
-ESQuery uses CSS-like selectors to query AST nodes. Here are some common patterns:
+ESQuery uses CSS-like selectors to query AST nodes. Here are some common
+patterns:
 
 ### Basic Selectors
+
 - `FunctionDeclaration` - Select all function declarations
 - `VariableDeclaration` - Select all variable declarations
 - `Identifier` - Select all identifiers
 - `CallExpression` - Select all function calls
 
 ### Attribute Selectors
+
 - `[name="foo"]` - Nodes with name property equal to "foo"
 - `[async=true]` - Nodes with async property set to true
 - `[name*="test"]` - Nodes with name containing "test"
@@ -158,12 +165,14 @@ ESQuery uses CSS-like selectors to query AST nodes. Here are some common pattern
 - `[name$="Hook"]` - Nodes with name ending with "Hook"
 
 ### Combinators
+
 - `A > B` - B is a direct child of A
 - `A B` - B is a descendant of A
 - `A + B` - B immediately follows A
 - `A ~ B` - B follows A (not necessarily immediately)
 
 ### Pseudo-selectors
+
 - `:first-child` - First child node
 - `:last-child` - Last child node
 - `:nth-child(n)` - nth child node
@@ -172,6 +181,7 @@ ESQuery uses CSS-like selectors to query AST nodes. Here are some common pattern
 ### Common AST Node Types
 
 #### JavaScript/TypeScript
+
 - `Program` - Root node
 - `FunctionDeclaration` - Function declarations
 - `ArrowFunctionExpression` - Arrow functions
@@ -184,36 +194,43 @@ ESQuery uses CSS-like selectors to query AST nodes. Here are some common pattern
 - `ReturnStatement` - Return statements
 
 #### TypeScript Specific
+
 - `TSInterfaceDeclaration` - Interface declarations
 - `TSTypeAliasDeclaration` - Type aliases
 - `TSEnumDeclaration` - Enum declarations
 - `TSModuleDeclaration` - Module declarations
 
 #### JSX/React
+
 - `JSXElement` - JSX elements
 - `JSXAttribute` - JSX attributes
 - `JSXExpressionContainer` - JSX expressions
 
 ## Tips
 
-1. **Start Simple**: Begin with basic node types like `FunctionDeclaration` or `Identifier`
+1. **Start Simple**: Begin with basic node types like `FunctionDeclaration` or
+   `Identifier`
 2. **Use Inspection**: Use `:TSESTreeInspect` to understand the AST structure
 3. **Combine Selectors**: Use combinators to create more specific queries
 4. **Save Common Selectors**: Create key mappings for frequently used selectors
-5. **Real-time Updates**: The autocmd setup ensures highlights update as you type
+5. **Real-time Updates**: The autocmd setup ensures highlights update as you
+   type
 
 ## Troubleshooting
 
 ### No Matches Found
+
 - Check if the file type is supported (js, ts, jsx, tsx, astro)
 - Verify the selector syntax using ESQuery documentation
 - Use `:TSESTreeInspect` to understand the AST structure
 
 ### Highlights Not Updating
+
 - Ensure the autocmd is set up correctly
 - Manually run `:TSESTreeReHighlight` to refresh
 
 ### Parse Errors
+
 - Check for syntax errors in your code
 - The plugin will show warnings for unparseable files
 
@@ -419,19 +436,24 @@ wk.register({
 
 ## Performance Considerations
 
-- **Large Files**: The plugin performs well on files up to ~10,000 lines. For larger files, consider using more specific selectors.
-- **Complex Selectors**: Very complex selectors with multiple combinators may be slower. Start simple and add complexity as needed.
-- **Real-time Updates**: The autocmd for re-highlighting can be disabled for very large files if performance is an issue.
+- **Large Files**: The plugin performs well on files up to ~10,000 lines. For
+  larger files, consider using more specific selectors.
+- **Complex Selectors**: Very complex selectors with multiple combinators may be
+  slower. Start simple and add complexity as needed.
+- **Real-time Updates**: The autocmd for re-highlighting can be disabled for
+  very large files if performance is an issue.
 
 ## ESQuery Resources
 
 - [ESQuery Documentation](https://github.com/estools/esquery)
 - [AST Explorer](https://astexplorer.net/) - Visualize AST structure
-- [TypeScript ESLint AST Spec](https://typescript-eslint.io/packages/types/) - Complete AST node reference
+- [TypeScript ESLint AST Spec](https://typescript-eslint.io/packages/types/) -
+  Complete AST node reference
 
 ## Changelog
 
 ### v1.0.0
+
 - Initial release with basic AST highlighting and navigation
 - Support for JavaScript, TypeScript, JSX, TSX, and Astro
 - ESQuery selector support
