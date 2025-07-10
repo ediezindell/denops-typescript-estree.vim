@@ -40,6 +40,7 @@ local spec = {
   },
   config = function()
     vim.api.nvim_create_autocmd({
+      "BufEnter",
       "TextChanged",
       "TextChangedI",
     }, {
