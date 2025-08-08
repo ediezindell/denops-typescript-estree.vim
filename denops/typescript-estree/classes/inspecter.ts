@@ -1,5 +1,6 @@
 import { Denops } from "jsr:@denops/std";
 import * as fn from "jsr:@denops/std/function";
+import type { TSESTree } from "npm:@typescript-eslint/typescript-estree@^8.28.0";
 
 import { getCurrentBufAst, getCurrentBufCode } from "../lib/utils.ts";
 import { findNodesAtPosition } from "../lib/ast.ts";
@@ -33,6 +34,78 @@ export default class Inspecter {
     return pos;
   };
 
+  #generateSelectors = (node: TSESTree.Node): string[] => {
+    const selectors: string[] = [node.type];
+
+    // Helper to add a selector if it's not already in the list
+    const addSelector = (selector: string) => {
+      if (!selectors.includes(selector)) {
+        selectors.push(selector);
+      }
+    };
+
+    // Generic attribute selectors
+    if ("name" in node && typeof node.name === "string" && node.name) {
+      addSelector(`${node.type}[name="${node.name}"]`);
+    }
+    if (
+      "value" in node && node.value !== null && node.value !== undefined
+    ) {
+      if (typeof node.value === "string") {
+        addSelector(`${node.type}[value="${node.value}"]`);
+      } else {
+        addSelector(`${node.type}[value=${node.value}]`);
+      }
+    }
+
+    // Type-specific selectors
+    switch (node.type) {
+      case "MemberExpression":
+        if (node.property.type === "Identifier") {
+          addSelector(`${node.type}[property.name="${node.property.name}"]`);
+        }
+        break;
+      case "CallExpression":
+        if (node.callee.type === "Identifier") {
+          addSelector(`${node.type}[callee.name="${node.callee.name}"]`);
+        } else if (
+          node.callee.type === "MemberExpression" &&
+          node.callee.object.type === "Identifier" &&
+          node.callee.property.type === "Identifier"
+        ) {
+          addSelector(
+            `${node.type}[callee.object.name="${node.callee.object.name}"][callee.property.name="${node.callee.property.name}"]`,
+          );
+        }
+        break;
+      case "JSXAttribute":
+        if (node.name.type === "JSXIdentifier") {
+          addSelector(`${node.type}[name.name="${node.name.name}"]`);
+        }
+        break;
+      case "JSXOpeningElement":
+        if (node.name.type === "JSXIdentifier") {
+          addSelector(`${node.type}[name.name="${node.name.name}"]`);
+        }
+        break;
+    }
+
+    return selectors;
+  };
+
+  #promptUserToSelect = async (
+    choices: string[],
+  ): Promise<string | null> => {
+    const choice = await this.#denops.call("inputlist", [
+      "Select a selector to copy:",
+      choices,
+    ]);
+    if (typeof choice === "number" && choice > 0 && choice <= choices.length) {
+      return choices[choice - 1];
+    }
+    return null;
+  };
+
   inspect = async () => {
     try {
       const ast = await getCurrentBufAst(this.#denops);
@@ -51,13 +124,26 @@ export default class Inspecter {
         return;
       }
 
-      // Display the most specific node (first in sorted array)
-      const mostSpecific = matchingNodes[0];
-      const message =
-        `AST Node: ${mostSpecific.type} (${mostSpecific.start}-${mostSpecific.end})`;
-      await this.#denops.cmd(`echo "${message}"`);
+      const selectors = matchingNodes.flatMap((item) =>
+        this.#generateSelectors(item.node)
+      );
+      const uniqueSelectors = [...new Set(selectors)];
 
-      console.log("All matching nodes:", matchingNodes);
+      if (uniqueSelectors.length === 0) {
+        await this.#denops.cmd(
+          `echo "No selectors could be generated for the node at cursor."`,
+        );
+        return;
+      }
+
+      const selectedSelector = await this.#promptUserToSelect(uniqueSelectors);
+
+      if (selectedSelector) {
+        await fn.setreg(this.#denops, '"', selectedSelector);
+        await this.#denops.cmd(
+          `echo "Copied to register: ${selectedSelector.replace(/"/g, '\\"')}"`,
+        );
+      }
     } catch (error) {
       console.error("Failed to inspect AST:", error);
       await this.#denops.cmd(
