@@ -112,6 +112,8 @@ export default class Matcher {
       await this.focusNext();
     } catch (error) {
       console.error("Failed to highlight selector:", error);
+      // Reset selector on error to prevent re-highlighting an invalid one
+      this.#selector = "";
       await this.#denops.cmd(
         `echohl ErrorMsg | echo "Invalid selector: ${selector}" | echohl None`,
       );
@@ -125,8 +127,11 @@ export default class Matcher {
       await this.#highlightSelector(this.#selector);
     } catch (error) {
       console.error("Failed to re-highlight:", error);
+      const selector = this.#selector;
+      // Reset selector on error to prevent re-highlighting an invalid one
+      this.#selector = "";
       await this.#denops.cmd(
-        `echohl ErrorMsg | echo "Failed to re-highlight" | echohl None`,
+        `echohl ErrorMsg | echo "Invalid selector: ${selector}" | echohl None`,
       );
     }
   };
