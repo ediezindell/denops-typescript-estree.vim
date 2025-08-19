@@ -107,12 +107,18 @@ export default class Inspecter {
     }
 
     try {
-      const choice = await this.#denops.call("inputlist", [
-        "Select a selector to copy:",
-        choices,
-      ]);
-      if (typeof choice === "number" && choice > 0 && choice <= choices.length) {
-        return choices[choice - 1];
+      const prompt = "Select a selector to copy:";
+      const choicesWithPrompt = [prompt, ...choices];
+      const choiceIndex = await this.#denops.call(
+        "inputlist",
+        choicesWithPrompt,
+      ) as number;
+
+      // inputlist() returns 1-based index. 0 for cancel.
+      // choiceIndex > 1 because index 1 is the prompt.
+      if (choiceIndex > 1 && choiceIndex <= choicesWithPrompt.length) {
+        // Return the selected item from the original choices array
+        return choices[choiceIndex - 2];
       }
       return null;
     } catch (e) {
