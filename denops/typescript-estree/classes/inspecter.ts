@@ -107,8 +107,9 @@ export default class Inspecter {
     }
 
     try {
-      const prompt = "Select a selector to copy:";
-      const choicesWithPrompt = [prompt, ...choices];
+      const prompt = "Type number to select a selector to copy:";
+      const numberedChoices = choices.map((c, i) => `${i + 1}: ${c}`);
+      const choicesWithPrompt = [prompt, ...numberedChoices];
       const choiceIndex = await this.#denops.call(
         "inputlist",
         choicesWithPrompt,
@@ -162,7 +163,9 @@ export default class Inspecter {
       if (selectedSelector) {
         await fn.setreg(this.#denops, '"', selectedSelector);
         await this.#denops.cmd(
-          `echo "Copied to register: ${selectedSelector.replace(/"/g, '\\"')}"`,
+          `echo "Copied to register \\" (default): ${
+            selectedSelector.replace(/"/g, '\\"')
+          }"`,
         );
       }
     } catch (error) {
