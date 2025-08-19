@@ -96,14 +96,31 @@ export default class Inspecter {
   #promptUserToSelect = async (
     choices: string[],
   ): Promise<string | null> => {
-    const choice = await this.#denops.call("inputlist", [
-      "Select a selector to copy:",
-      choices,
-    ]);
-    if (typeof choice === "number" && choice > 0 && choice <= choices.length) {
-      return choices[choice - 1];
+    // For debugging the "empty list" issue
+    console.log("Selector choices being passed to inputlist:", choices);
+
+    if (choices.length === 0) {
+      await this.#denops.cmd(
+        `echohl WarningMsg | echo "No unique selectors could be generated." | echohl None`,
+      );
+      return null;
     }
-    return null;
+
+    try {
+      const choice = await this.#denops.call("inputlist", [
+        "Select a selector to copy:",
+        choices,
+      ]);
+      if (typeof choice === "number" && choice > 0 && choice <= choices.length) {
+        return choices[choice - 1];
+      }
+      return null;
+    } catch (e) {
+      // User cancelled the inputlist, which can throw an error in Deno/Vim.
+      // We can safely ignore it and return null.
+      console.log("Input cancelled by user.");
+      return null;
+    }
   };
 
   inspect = async () => {
@@ -124,19 +141,17 @@ export default class Inspecter {
         return;
       }
 
-      const selectors = matchingNodes.flatMap((item) =>
-        this.#generateSelectors(item.node)
-      );
-      const uniqueSelectors = [...new Set(selectors)];
+      const selectors = matchingNodes.reduce((acc: string[], item) => {
+        const generated = this.#generateSelectors(item.node);
+        for (const s of generated) {
+          if (!acc.includes(s)) {
+            acc.push(s);
+          }
+        }
+        return acc;
+      }, []);
 
-      if (uniqueSelectors.length === 0) {
-        await this.#denops.cmd(
-          `echo "No selectors could be generated for the node at cursor."`,
-        );
-        return;
-      }
-
-      const selectedSelector = await this.#promptUserToSelect(uniqueSelectors);
+      const selectedSelector = await this.#promptUserToSelect(selectors);
 
       if (selectedSelector) {
         await fn.setreg(this.#denops, '"', selectedSelector);
