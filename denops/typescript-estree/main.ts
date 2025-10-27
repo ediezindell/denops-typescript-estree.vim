@@ -1,4 +1,5 @@
 import type { Dispatcher, Entrypoint } from "jsr:@denops/std";
+import { autocmd } from "jsr:@denops/std/autocmd";
 
 import Matcher from "./classes/matcher.ts";
 import Inspecter from "./classes/inspecter.ts";
@@ -35,4 +36,12 @@ export const main: Entrypoint = (denops) => {
   registerCommand("TSESTreeFocusNext", "focusNext");
 
   registerCommand("TSESTreeInspect", "inspect");
+
+  autocmd.group(denops, "TSESTree", (helper) => {
+    helper.define(
+      ["BufEnter", "TextChanged", "TextChangedI"],
+      "*",
+      `call denops#notify('${denops.name}', 'reHighlight', [])`,
+    );
+  });
 };
