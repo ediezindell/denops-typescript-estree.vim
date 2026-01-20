@@ -13,6 +13,7 @@ export default class Matcher {
   #denops: Denops;
   #selector = "";
   #pos: [number, number, number][];
+  #reHighlightTimer: number | undefined;
 
   constructor(denops: Denops) {
     this.#denops = denops;
@@ -120,20 +121,27 @@ export default class Matcher {
     }
   };
 
+  // Debounce re-highlighting to prevent excessive AST parsing during rapid text changes
   reHighlight = async () => {
     if (!this.#selector) return;
 
-    try {
-      await this.#highlightSelector(this.#selector);
-    } catch (error) {
-      console.error("Failed to re-highlight:", error);
-      const selector = this.#selector;
-      // Reset selector on error to prevent re-highlighting an invalid one
-      this.#selector = "";
-      await this.#denops.cmd(
-        `echohl ErrorMsg | echo "Invalid selector: ${selector}" | echohl None`,
-      );
+    if (this.#reHighlightTimer !== undefined) {
+      clearTimeout(this.#reHighlightTimer);
     }
+
+    this.#reHighlightTimer = setTimeout(async () => {
+      try {
+        await this.#highlightSelector(this.#selector);
+      } catch (error) {
+        console.error("Failed to re-highlight:", error);
+        const selector = this.#selector;
+        // Reset selector on error to prevent re-highlighting an invalid one
+        this.#selector = "";
+        await this.#denops.cmd(
+          `echohl ErrorMsg | echo "Invalid selector: ${selector}" | echohl None`,
+        );
+      }
+    }, 100);
   };
 
   focusPrev = async () => {
