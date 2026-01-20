@@ -1,23 +1,36 @@
 import type { Denops } from "jsr:@denops/std";
 import * as fn from "jsr:@denops/std/function";
+import { batch, collect } from "jsr:@denops/std/batch";
 
 import { getMatchingNodes } from "../lib/ast.ts";
 import { assert, is } from "jsr:@core/unknownutil";
 
 import { getCurrentBufAst } from "../lib/utils.ts";
 
+interface MatchPos {
+  line: number;
+  column: number;
+  endLine: number;
+  endColumn: number;
+}
+
 export default class Matcher {
   #group = "SearchAst";
 
-  #matchId: number;
+  #nsId: number;
+  #matchIds: number[];
   #denops: Denops;
   #selector = "";
-  #pos: [number, number, number][];
+  #pos: MatchPos[];
+  #isNvim: boolean;
 
   constructor(denops: Denops) {
     this.#denops = denops;
-    this.#matchId = -1;
+    this.#nsId = -1;
+    this.#matchIds = [];
     this.#pos = [];
+    // Only use nvim optimization if explicitly detecting nvim
+    this.#isNvim = denops.meta.host === "nvim";
 
     this.#init();
   }
@@ -26,6 +39,12 @@ export default class Matcher {
     await this.#denops.cmd(
       `highlight ${this.#group} guifg=#272822 guibg=#f92672`,
     );
+    if (this.#isNvim) {
+      this.#nsId = await this.#denops.call(
+        "nvim_create_namespace",
+        "denops-typescript-estree",
+      ) as number;
+    }
   };
 
   #requireSelectorInput = async () => {
@@ -61,40 +80,107 @@ export default class Matcher {
 
     this.#pos = matchingNodes
       .filter(({ loc }) => loc)
-      .map(({ loc }) => loc)
-      .map(({ start, end }) => [
-        start.line,
-        start.column + 1, // Convert 0-based to 1-based column
-        Math.max(1, end.column - start.column), // Ensure minimum length of 1
-      ]);
+      .map(({ loc }) => {
+        const line = loc!.start.line - 1; // 0-based
+        const column = loc!.start.column; // 0-based
+        const endLine = loc!.end.line - 1; // 0-based
+        let endColumn = loc!.end.column; // 0-based
+
+        // Ensure minimum length of 1 if on same line (handle zero-width nodes)
+        if (line === endLine && endColumn <= column) {
+          endColumn = column + 1;
+        }
+
+        return {
+          line,
+          column,
+          endLine,
+          endColumn,
+        };
+      });
 
     // Sort positions for navigation
     this.#pos.sort((a, b) => {
-      if (a[0] !== b[0]) {
-        return a[0] - b[0];
+      if (a.line !== b.line) {
+        return a.line - b.line;
       }
-      if (a[1] !== b[1]) {
-        return a[1] - b[1];
-      }
-      return a[2] - b[2];
+      return a.column - b.column;
     });
 
-    this.#matchId = await fn.matchaddpos(this.#denops, this.#group, this.#pos);
+    if (this.#isNvim) {
+      const bufnr = await fn.bufnr(this.#denops);
+      await batch(this.#denops, async (denops) => {
+        for (const pos of this.#pos) {
+          await denops.call(
+            "nvim_buf_set_extmark",
+            bufnr,
+            this.#nsId,
+            pos.line,
+            pos.column,
+            {
+              end_row: pos.endLine,
+              end_col: pos.endColumn,
+              hl_group: this.#group,
+            },
+          );
+        }
+      });
+    } else {
+      // Vim fallback: use matchaddpos with batching (limit 8 per call)
+      const positionsToHighlight = this.#pos.map((p) => {
+        // matchaddpos expects 1-based line/col
+        // For multiline, we fallback to highlighting just the first line part or 1 char
+        // to avoid complexity and matchaddpos limitations.
+        const len = (p.line === p.endLine) ? (p.endColumn - p.column) : 1;
+        return [p.line + 1, p.column + 1, Math.max(1, len)];
+      });
+
+      // Use collect to get the return values (match IDs)
+      const results = await collect(this.#denops, (denops) => {
+        const calls = [];
+        for (let i = 0; i < positionsToHighlight.length; i += 8) {
+          const chunk = positionsToHighlight.slice(i, i + 8);
+          calls.push(denops.call("matchaddpos", this.#group, chunk));
+        }
+        return calls;
+      });
+      // Store IDs for cleanup
+      this.#matchIds = results as number[];
+    }
 
     // Show match count
     await this.#denops.cmd(`echo "Found ${matchingNodes.length} matches"`);
   };
 
   #resetHighlight = async () => {
-    if (this.#matchId > 0) {
-      try {
-        await fn.matchdelete(this.#denops, this.#matchId);
-      } catch (error) {
-        // Match might already be deleted, ignore error
-        console.debug("Failed to delete match:", error);
+    if (this.#isNvim) {
+      if (this.#nsId !== -1) {
+        try {
+          await this.#denops.call(
+            "nvim_buf_clear_namespace",
+            0,
+            this.#nsId,
+            0,
+            -1,
+          );
+        } catch (error) {
+          console.debug("Failed to clear namespace:", error);
+        }
+      }
+    } else {
+      if (this.#matchIds.length > 0) {
+        try {
+          await batch(this.#denops, async (denops) => {
+            for (const id of this.#matchIds) {
+              await fn.matchdelete(denops, id);
+            }
+          });
+        } catch (error) {
+          console.debug("Failed to delete matches:", error);
+        }
+        this.#matchIds = [];
       }
     }
-    this.#matchId = -1;
     this.#pos = [];
   };
 
@@ -138,19 +224,21 @@ export default class Matcher {
 
   focusPrev = async () => {
     const [, currentLine, currentColumn] = await fn.getcurpos(this.#denops);
-    const prevIndex = this.#pos.findLastIndex(([line, column]) => {
-      if (line > currentLine) return false;
-      if (line < currentLine) return true;
-      return column < currentColumn;
+    // currentLine is 1-based, currentColumn is 1-based
+    const prevIndex = this.#pos.findLastIndex((pos) => {
+      if ((pos.line + 1) > currentLine) return false;
+      if ((pos.line + 1) < currentLine) return true;
+      return (pos.column + 1) < currentColumn;
     });
     await this.#focus(prevIndex);
   };
   focusNext = async () => {
     const [, currentLine, currentColumn] = await fn.getcurpos(this.#denops);
-    const nextIndex = this.#pos.findIndex(([line, column]) => {
-      if (line < currentLine) return false;
-      if (line > currentLine) return true;
-      return currentColumn < column;
+    // currentLine is 1-based, currentColumn is 1-based
+    const nextIndex = this.#pos.findIndex((pos) => {
+      if ((pos.line + 1) < currentLine) return false;
+      if ((pos.line + 1) > currentLine) return true;
+      return currentColumn < (pos.column + 1);
     });
     await this.#focus(nextIndex);
   };
@@ -162,8 +250,8 @@ export default class Matcher {
     }
 
     const pos = this.#pos[index];
-    const [line, column] = pos;
-    await fn.cursor(this.#denops, line, column);
+    // fn.cursor expects 1-based line, 1-based column
+    await fn.cursor(this.#denops, pos.line + 1, pos.column + 1);
 
     // Show current match position
     await this.#denops.cmd(`echo "Match ${index + 1}/${this.#pos.length}"`);

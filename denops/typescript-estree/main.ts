@@ -22,13 +22,15 @@ export const main: Entrypoint = (denops) => {
   const registerCommand = (
     command: string,
     endpoint: keyof typeof dispatcher,
+    blocking = true,
   ) => {
+    const method = blocking ? "request" : "notify";
     denops.cmd(
-      `command! ${command} call denops#request('${denops.name}', '${endpoint}', [])`,
+      `command! ${command} call denops#${method}('${denops.name}', '${endpoint}', [])`,
     );
   };
   registerCommand("TSESTreeHighlight", "highlight");
-  registerCommand("TSESTreeReHighlight", "reHighlight");
+  registerCommand("TSESTreeReHighlight", "reHighlight", false);
   registerCommand("TSESTreeResetHighlight", "resetHighlight");
 
   registerCommand("TSESTreeFocusPrev", "focusPrev");
