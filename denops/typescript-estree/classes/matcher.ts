@@ -1,5 +1,6 @@
 import type { Denops } from "jsr:@denops/std";
 import * as fn from "jsr:@denops/std/function";
+import { batch } from "jsr:@denops/std/batch";
 
 import { getMatchingNodes } from "../lib/ast.ts";
 import { assert, is } from "jsr:@core/unknownutil";
@@ -8,6 +9,7 @@ import { getCurrentBufAst } from "../lib/utils.ts";
 
 export default class Matcher {
   #group = "SearchAst";
+  #nsId = -1;
 
   #matchId: number;
   #denops: Denops;
@@ -27,6 +29,12 @@ export default class Matcher {
     await this.#denops.cmd(
       `highlight ${this.#group} guifg=#272822 guibg=#f92672`,
     );
+    if (this.#denops.meta.host === "nvim") {
+      this.#nsId = await this.#denops.call(
+        "nvim_create_namespace",
+        "typescript-estree",
+      ) as number;
+    }
   };
 
   #requireSelectorInput = async () => {
@@ -80,22 +88,58 @@ export default class Matcher {
       return a[2] - b[2];
     });
 
-    this.#matchId = await fn.matchaddpos(this.#denops, this.#group, this.#pos);
+    if (this.#denops.meta.host === "nvim") {
+      await batch(this.#denops, async (denops) => {
+        await denops.call("nvim_buf_clear_namespace", 0, this.#nsId, 0, -1);
+        for (const [line, col, len] of this.#pos) {
+          await denops.call(
+            "nvim_buf_set_extmark",
+            0,
+            this.#nsId,
+            line - 1,
+            col - 1,
+            {
+              end_row: line - 1,
+              end_col: col - 1 + len,
+              hl_group: this.#group,
+            },
+          );
+        }
+      });
+    } else {
+      this.#matchId = await fn.matchaddpos(
+        this.#denops,
+        this.#group,
+        this.#pos,
+      );
+    }
 
     // Show match count
     await this.#denops.cmd(`echo "Found ${matchingNodes.length} matches"`);
   };
 
   #resetHighlight = async () => {
-    if (this.#matchId > 0) {
-      try {
-        await fn.matchdelete(this.#denops, this.#matchId);
-      } catch (error) {
-        // Match might already be deleted, ignore error
-        console.debug("Failed to delete match:", error);
+    if (this.#denops.meta.host === "nvim") {
+      if (this.#nsId !== -1) {
+        await this.#denops.call(
+          "nvim_buf_clear_namespace",
+          0,
+          this.#nsId,
+          0,
+          -1,
+        );
       }
+    } else {
+      if (this.#matchId > 0) {
+        try {
+          await fn.matchdelete(this.#denops, this.#matchId);
+        } catch (error) {
+          // Match might already be deleted, ignore error
+          console.debug("Failed to delete match:", error);
+        }
+      }
+      this.#matchId = -1;
     }
-    this.#matchId = -1;
     this.#pos = [];
   };
 
