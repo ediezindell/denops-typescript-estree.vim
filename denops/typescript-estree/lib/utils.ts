@@ -7,10 +7,17 @@ import { parseToAst } from "../lib/ast.ts";
 
 type AstRoot = NonNullable<ReturnType<typeof parseToAst>>;
 
-let astCache: { bufnr: number; tick: number; ast: AstRoot } | null = null;
+let astCache: { bufnr: number; tick: number; ast: AstRoot; code: string } | null =
+  null;
 
 export const getCurrentBufCode = async (denops: Denops) => {
   const bufnr = await fn.bufnr(denops);
+  const tick = await fn.getbufvar(denops, bufnr, "changedtick") as number;
+
+  if (astCache && astCache.bufnr === bufnr && astCache.tick === tick) {
+    return astCache.code;
+  }
+
   const buflines = await fn.getbufline(denops, bufnr, 1, "$");
   assert(buflines, is.ArrayOf(is.String));
 
@@ -36,7 +43,7 @@ export const getCurrentBufAst = async (denops: Denops) => {
     }
     const ast = parseToAst(code);
     if (ast) {
-      astCache = { bufnr, tick, ast: ast as AstRoot };
+      astCache = { bufnr, tick, ast: ast as AstRoot, code };
     }
     return ast;
   } catch (error) {
