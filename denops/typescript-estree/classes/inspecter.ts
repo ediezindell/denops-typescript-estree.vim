@@ -1,7 +1,12 @@
+// deno-lint-ignore-file no-import-prefix no-unversioned-import
 import { Denops } from "jsr:@denops/std";
 import * as fn from "jsr:@denops/std/function";
 
-import { getCurrentBufAst, getCurrentBufCode } from "../lib/utils.ts";
+import {
+  byteIndexToCharIndex,
+  getCurrentBufAst,
+  getCurrentBufCode,
+} from "../lib/utils.ts";
 import { findNodesAtPosition } from "../lib/ast.ts";
 
 export default class Inspecter {
@@ -15,19 +20,22 @@ export default class Inspecter {
     const [, line, col] = await fn.getcurpos(this.#denops);
     const code = await getCurrentBufCode(this.#denops);
 
-    // Convert 1-based line/column to 0-based byte position
+    // Convert 1-based line/column to 0-based character position
     const lines = code.split("\n");
     let pos = 0;
 
-    // Add bytes for all lines before current line
+    // Add characters for all lines before current line
     for (let i = 0; i < line - 1; i++) {
-      pos += new TextEncoder().encode(lines[i] + "\n").length;
+      // +1 for newline character
+      pos += lines[i].length + 1;
     }
 
-    // Add bytes for columns in current line (col is 1-based)
+    // Add characters for columns in current line (col is 1-based byte index)
     if (lines[line - 1]) {
-      const currentLinePrefix = lines[line - 1].substring(0, col - 1);
-      pos += new TextEncoder().encode(currentLinePrefix).length;
+      const currentLine = lines[line - 1];
+      // col is 1-based byte index, so col-1 is 0-based byte index
+      const charOffset = byteIndexToCharIndex(currentLine, col - 1);
+      pos += charOffset;
     }
 
     return pos;
