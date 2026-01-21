@@ -1,5 +1,7 @@
+// deno-lint-ignore-file no-import-prefix no-unversioned-import
 import type { Denops } from "jsr:@denops/std";
 import * as fn from "jsr:@denops/std/function";
+import { batch } from "jsr:@denops/std/batch";
 
 import { getMatchingNodes } from "../lib/ast.ts";
 import { assert, is } from "jsr:@core/unknownutil";
@@ -14,6 +16,7 @@ export default class Matcher {
   #selector = "";
   #pos: [number, number, number][];
   #reHighlightTimer: number | undefined;
+  #namespace: number | undefined;
 
   constructor(denops: Denops) {
     this.#denops = denops;
@@ -24,6 +27,13 @@ export default class Matcher {
   }
 
   #init = async () => {
+    if (this.#denops.meta.host === "nvim") {
+      this.#namespace = await this.#denops.call(
+        "nvim_create_namespace",
+        "typescript-estree",
+      ) as number;
+    }
+
     await this.#denops.cmd(
       `highlight ${this.#group} guifg=#272822 guibg=#f92672`,
     );
@@ -60,9 +70,11 @@ export default class Matcher {
       return;
     }
 
-    this.#pos = matchingNodes
-      .filter(({ loc }) => loc)
-      .map(({ loc }) => loc)
+    // Filter nodes with location
+    const nodesWithLoc = matchingNodes.filter(({ loc }) => loc);
+
+    this.#pos = nodesWithLoc
+      .map(({ loc }) => loc!)
       .map(({ start, end }) => [
         start.line,
         start.column + 1, // Convert 0-based to 1-based column
@@ -80,13 +92,49 @@ export default class Matcher {
       return a[2] - b[2];
     });
 
-    this.#matchId = await fn.matchaddpos(this.#denops, this.#group, this.#pos);
+    if (this.#namespace !== undefined) {
+      // Neovim: use nvim_buf_set_extmark via batch
+      await batch(this.#denops, async (denops) => {
+        for (const { loc } of nodesWithLoc) {
+          if (!loc) continue;
+          const { start, end } = loc;
+          await denops.call(
+            "nvim_buf_set_extmark",
+            0, // current buffer
+            this.#namespace,
+            start.line - 1, // 0-based
+            start.column, // 0-based
+            {
+              end_line: end.line - 1, // 0-based
+              end_col: end.column, // 0-based
+              hl_group: this.#group,
+            },
+          );
+        }
+      });
+    } else {
+      this.#matchId = await fn.matchaddpos(
+        this.#denops,
+        this.#group,
+        this.#pos,
+      );
+    }
 
     // Show match count
     await this.#denops.cmd(`echo "Found ${matchingNodes.length} matches"`);
   };
 
   #resetHighlight = async () => {
+    if (this.#namespace !== undefined) {
+      await this.#denops.call(
+        "nvim_buf_clear_namespace",
+        0,
+        this.#namespace,
+        0,
+        -1,
+      );
+    }
+
     if (this.#matchId > 0) {
       try {
         await fn.matchdelete(this.#denops, this.#matchId);
@@ -122,6 +170,7 @@ export default class Matcher {
   };
 
   // Debounce re-highlighting to prevent excessive AST parsing during rapid text changes
+  // deno-lint-ignore require-await
   reHighlight = async () => {
     if (!this.#selector) return;
 
