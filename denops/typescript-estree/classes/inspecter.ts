@@ -1,6 +1,7 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
 import { Denops } from "jsr:@denops/std";
 import * as fn from "jsr:@denops/std/function";
+import type { TSESTree } from "npm:@typescript-eslint/typescript-estree@^8.28.0";
 
 import {
   byteIndexToCharIndex,
@@ -41,6 +42,102 @@ export default class Inspecter {
     return pos;
   };
 
+  #generateSelectors = (node: TSESTree.Node): string[] => {
+    const selectors: string[] = [node.type];
+
+    // Helper to add a selector if it's not already in the list
+    const addSelector = (selector: string) => {
+      if (!selectors.includes(selector)) {
+        selectors.push(selector);
+      }
+    };
+
+    // Generic attribute selectors
+    if ("name" in node && typeof node.name === "string" && node.name) {
+      addSelector(`${node.type}[name="${node.name}"]`);
+    }
+    if (
+      "value" in node && node.value !== null && node.value !== undefined
+    ) {
+      if (typeof node.value === "string") {
+        addSelector(`${node.type}[value="${node.value}"]`);
+      } else {
+        addSelector(`${node.type}[value=${node.value}]`);
+      }
+    }
+
+    // Type-specific selectors
+    switch (node.type) {
+      case "MemberExpression":
+        if (node.property.type === "Identifier") {
+          addSelector(`${node.type}[property.name="${node.property.name}"]`);
+        }
+        break;
+      case "CallExpression":
+        if (node.callee.type === "Identifier") {
+          addSelector(`${node.type}[callee.name="${node.callee.name}"]`);
+        } else if (
+          node.callee.type === "MemberExpression" &&
+          node.callee.object.type === "Identifier" &&
+          node.callee.property.type === "Identifier"
+        ) {
+          addSelector(
+            `${node.type}[callee.object.name="${node.callee.object.name}"][callee.property.name="${node.callee.property.name}"]`,
+          );
+        }
+        break;
+      case "JSXAttribute":
+        if (node.name.type === "JSXIdentifier") {
+          addSelector(`${node.type}[name.name="${node.name.name}"]`);
+        }
+        break;
+      case "JSXOpeningElement":
+        if (node.name.type === "JSXIdentifier") {
+          addSelector(`${node.type}[name.name="${node.name.name}"]`);
+        }
+        break;
+    }
+
+    return selectors;
+  };
+
+  #promptUserToSelect = async (
+    choices: string[],
+  ): Promise<string | null> => {
+    // For debugging the "empty list" issue
+    console.log("Selector choices being passed to inputlist:", choices);
+
+    if (choices.length === 0) {
+      await this.#denops.cmd(
+        `echohl WarningMsg | echo "No unique selectors could be generated." | echohl None`,
+      );
+      return null;
+    }
+
+    try {
+      const prompt = "Type number to select a selector to copy:";
+      const numberedChoices = choices.map((c, i) => `${i + 1}: ${c}`);
+      const choicesWithPrompt = [prompt, ...numberedChoices];
+      const choiceIndex = await this.#denops.call(
+        "inputlist",
+        choicesWithPrompt,
+      ) as number;
+
+      // inputlist() returns 1-based index. 0 for cancel.
+      // choiceIndex > 1 because index 1 is the prompt.
+      if (choiceIndex > 1 && choiceIndex <= choicesWithPrompt.length) {
+        // Return the selected item from the original choices array
+        return choices[choiceIndex - 2];
+      }
+      return null;
+    } catch (e) {
+      // User cancelled the inputlist, which can throw an error in Deno/Vim.
+      // We can safely ignore it and return null.
+      console.log("Input cancelled by user.");
+      return null;
+    }
+  };
+
   inspect = async () => {
     try {
       const ast = await getCurrentBufAst(this.#denops);
@@ -59,13 +156,26 @@ export default class Inspecter {
         return;
       }
 
-      // Display the most specific node (first in sorted array)
-      const mostSpecific = matchingNodes[0];
-      const message =
-        `AST Node: ${mostSpecific.type} (${mostSpecific.start}-${mostSpecific.end})`;
-      await this.#denops.cmd(`echo "${message}"`);
+      const selectors = matchingNodes.reduce((acc: string[], item) => {
+        const generated = this.#generateSelectors(item.node);
+        for (const s of generated) {
+          if (!acc.includes(s)) {
+            acc.push(s);
+          }
+        }
+        return acc;
+      }, []);
 
-      console.log("All matching nodes:", matchingNodes);
+      const selectedSelector = await this.#promptUserToSelect(selectors);
+
+      if (selectedSelector) {
+        await fn.setreg(this.#denops, '"', selectedSelector);
+        await this.#denops.cmd(
+          `echo "Copied to register \\" (default): ${
+            selectedSelector.replace(/"/g, '\\"')
+          }"`,
+        );
+      }
     } catch (error) {
       console.error("Failed to inspect AST:", error);
       await this.#denops.cmd(
