@@ -1,6 +1,10 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
 import { assertEquals } from "jsr:@std/assert";
-import { getCurrentBufAst, getCurrentBufCode } from "./utils.ts";
+import {
+  byteIndexToCharIndex,
+  getCurrentBufAst,
+  getCurrentBufCode,
+} from "./utils.ts";
 import type { Denops } from "jsr:@denops/std";
 
 Deno.test("getCurrentBufAst caches AST based on changedtick", async () => {
@@ -18,7 +22,7 @@ Deno.test("getCurrentBufAst caches AST based on changedtick", async () => {
       if (name === "getbufvar") {
         // args[0] is bufnr, args[1] is varname
         if (args[1] === "changedtick") {
-            return currentTick;
+          return currentTick;
         }
       }
       return null;
@@ -57,7 +61,7 @@ Deno.test("getCurrentBufCode uses cached code from getCurrentBufAst", async () =
       }
       if (name === "getbufvar") {
         if (args[1] === "changedtick") {
-            return currentTick;
+          return currentTick;
         }
       }
       return null;
@@ -78,4 +82,56 @@ Deno.test("getCurrentBufCode uses cached code from getCurrentBufAst", async () =
   // EXPECTATION: With optimization, count should remain 1.
   // Without optimization, count becomes 2.
   assertEquals(getBufLineCallCount, 1, "getCurrentBufCode should use cached code");
+});
+
+Deno.test("byteIndexToCharIndex", async (t) => {
+  await t.step("ASCII string", () => {
+    const str = "hello";
+    // 'h' (0) -> 0
+    assertEquals(byteIndexToCharIndex(str, 0), 0);
+    // 'e' (1) -> 1
+    assertEquals(byteIndexToCharIndex(str, 1), 1);
+    // 'o' (4) -> 4
+    assertEquals(byteIndexToCharIndex(str, 4), 4);
+    // End of string
+    assertEquals(byteIndexToCharIndex(str, 5), 5);
+  });
+
+  await t.step("Multi-byte string (UTF-8 3 bytes)", () => {
+    // 'a' (1 byte) + '★' (3 bytes) + 'b' (1 byte)
+    // '★' is U+2605
+    const str = "a★b";
+
+    // 'a' at 0 -> 0
+    assertEquals(byteIndexToCharIndex(str, 0), 0);
+
+    // '★' at 1 (byte 1) -> 1 (char 1)
+    assertEquals(byteIndexToCharIndex(str, 1), 1);
+
+    // 'b' at 1+3 = 4 (byte 4) -> 2 (char 2)
+    assertEquals(byteIndexToCharIndex(str, 4), 2);
+
+    // End at 5 bytes -> 3 chars
+    assertEquals(byteIndexToCharIndex(str, 5), 3);
+  });
+
+  await t.step("Surrogate pair (UTF-8 4 bytes)", () => {
+    // 'a' + 💩 (pile of poo, U+1F4A9) + 'b'
+    // 💩 is 4 bytes in UTF-8: F0 9F 92 A9
+    // In UTF-16, it is \uD83D\uDCA9 (2 code units)
+    const str = "a💩b";
+
+    // 'a' at 0 -> 0
+    assertEquals(byteIndexToCharIndex(str, 0), 0);
+
+    // 💩 starts at byte 1. Char index 1.
+    assertEquals(byteIndexToCharIndex(str, 1), 1);
+
+    // 'b' starts at byte 1+4 = 5.
+    // In chars: 'a' (1) + 💩 (2) = 3.
+    assertEquals(byteIndexToCharIndex(str, 5), 3);
+
+    // End at 6 bytes -> 4 chars
+    assertEquals(byteIndexToCharIndex(str, 6), 4);
+  });
 });

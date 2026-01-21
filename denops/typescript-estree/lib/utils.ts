@@ -57,3 +57,45 @@ export const getSourceFilePath = async (denops: Denops) => {
   assert(path, is.String);
   return path;
 };
+
+/**
+ * Converts a byte index (UTF-8) to a character index (UTF-16) in a string.
+ * This is efficient and avoids creating TextEncoder instances.
+ */
+export const byteIndexToCharIndex = (
+  str: string,
+  targetByteIndex: number,
+): number => {
+  let byteCount = 0;
+  let charIndex = 0;
+
+  while (charIndex < str.length && byteCount < targetByteIndex) {
+    const code = str.charCodeAt(charIndex);
+    let nextStep = 1;
+
+    if (code < 0x80) {
+      nextStep = 1;
+    } else if (code < 0x800) {
+      nextStep = 2;
+    } else if (code < 0xd800 || code >= 0xe000) {
+      nextStep = 3;
+    } else {
+      // Surrogate pair: 4 bytes total (high surrogate + low surrogate)
+      // High surrogate is 0xD800-0xDBFF
+      nextStep = 4;
+    }
+
+    // Check if adding this character exceeds the target byte index
+    if (byteCount + nextStep > targetByteIndex) {
+      break;
+    }
+
+    byteCount += nextStep;
+    if (nextStep === 4) {
+      charIndex++; // Skip the low surrogate
+    }
+    charIndex++;
+  }
+
+  return charIndex;
+};
