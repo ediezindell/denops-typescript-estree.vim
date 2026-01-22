@@ -1,14 +1,15 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
 import { Denops } from "jsr:@denops/std";
 import * as fn from "jsr:@denops/std/function";
+import { collect } from "jsr:@denops/std/batch";
 
 import {
   byteIndexToCharIndex,
-  getCurrentBufAst,
-  getCurrentBufCode,
-  getLineStartIndices,
+  checkCache,
+  fetchBufState,
+  updateCacheAst,
 } from "../lib/utils.ts";
-import { findNodesAtPosition } from "../lib/ast.ts";
+import { findNodesAtPosition, parseToAst } from "../lib/ast.ts";
 
 export default class Inspecter {
   #denops: Denops;
@@ -17,36 +18,17 @@ export default class Inspecter {
     this.#denops = denops;
   }
 
-  #getCursorPosition = async () => {
-    const [, line, col] = await fn.getcurpos(this.#denops);
-    const code = await getCurrentBufCode(this.#denops);
-    const lineStartIndices = await getLineStartIndices(this.#denops);
-
+  // Refactored to accept code/indices and cursor position directly
+  #getCursorPosition = (
+    line: number,
+    col: number,
+    code: string,
+    lineStartIndices: number[],
+  ) => {
     // Convert 1-based line/column to 0-based character position
-    if (!lineStartIndices) {
-      // Fallback if indices are missing (should not happen with updated utils)
-      let pos = 0;
-      for (let i = 0; i < line - 1; i++) {
-        const nextNewline = code.indexOf("\n", pos);
-        if (nextNewline === -1) {
-          pos = code.length;
-          break;
-        }
-        pos = nextNewline + 1;
-      }
 
-      if (pos <= code.length) {
-        const nextNewline = code.indexOf("\n", pos);
-        const lineEnd = nextNewline === -1 ? code.length : nextNewline;
-        const currentLine = code.slice(pos, lineEnd);
-        const charOffset = byteIndexToCharIndex(currentLine, col - 1);
-        pos += charOffset;
-      }
-      return pos;
-    }
-
-    const lineIndex = line - 1;
     // Safety check for line existence
+    const lineIndex = line - 1;
     if (lineIndex >= lineStartIndices.length) {
       return code.length;
     }
@@ -75,7 +57,34 @@ export default class Inspecter {
 
   inspect = async () => {
     try {
-      const ast = await getCurrentBufAst(this.#denops);
+      // Optimization: Fetch bufnr, changedtick and cursor pos in a single RPC call
+      const [bufnr, tick, cursor] = await collect(this.#denops, (denops) => [
+        fn.bufnr(denops),
+        fn.getbufvar(denops, "%", "changedtick"),
+        fn.getcurpos(denops),
+      ]) as [number, number, [number, number, number, number, number]];
+
+      let state = checkCache(bufnr, tick);
+      if (!state) {
+        state = await fetchBufState(this.#denops, bufnr, tick);
+      }
+
+      let ast = state.ast;
+      if (!ast) {
+        if (!state.code.trim()) {
+          await this.#denops.cmd(
+            `echohl WarningMsg | echo "Buffer is empty" | echohl None`,
+          );
+          return;
+        }
+        // Parse AST if missing
+        const newAst = parseToAst(state.code);
+        if (newAst) {
+          updateCacheAst(bufnr, tick, newAst);
+          ast = newAst;
+        }
+      }
+
       if (!ast) {
         await this.#denops.cmd(
           `echohl WarningMsg | echo "Failed to parse current buffer" | echohl None`,
@@ -83,7 +92,14 @@ export default class Inspecter {
         return;
       }
 
-      const pos = await this.#getCursorPosition();
+      const [, line, col] = cursor;
+      const pos = this.#getCursorPosition(
+        line,
+        col,
+        state.code,
+        state.lineStartIndices,
+      );
+
       const matchingNodes = findNodesAtPosition(ast, pos);
 
       if (matchingNodes.length === 0) {
