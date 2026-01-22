@@ -106,3 +106,39 @@ export const byteIndexToCharIndex = (
 
   return charIndex;
 };
+
+/**
+ * Efficiently calculates the character index (0-based) in a code string
+ * given a 1-based line number and a 1-based byte column (Neovim style).
+ * This avoids splitting the entire string into lines.
+ */
+export const getCharIndexFromLineCol = (
+  code: string,
+  line: number,
+  col: number,
+): number => {
+  let lineStart = 0;
+  const targetLineIndex = line - 1;
+
+  if (targetLineIndex > 0) {
+    let idx = 0;
+    let linesSkipped = 0;
+    while (linesSkipped < targetLineIndex) {
+      idx = code.indexOf("\n", idx);
+      if (idx === -1) {
+        throw new Error(`Line number ${line} out of bounds`);
+      }
+      idx++; // Skip \n
+      linesSkipped++;
+    }
+    lineStart = idx;
+  }
+
+  const lineEnd = code.indexOf("\n", lineStart);
+  const currentLine = lineEnd === -1
+    ? code.slice(lineStart)
+    : code.slice(lineStart, lineEnd);
+
+  // col is 1-based byte index, convert to 0-based for calculation
+  return lineStart + byteIndexToCharIndex(currentLine, col - 1);
+};

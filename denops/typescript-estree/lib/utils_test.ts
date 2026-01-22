@@ -1,7 +1,8 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals, assertThrows } from "jsr:@std/assert";
 import {
   byteIndexToCharIndex,
+  getCharIndexFromLineCol,
   getCurrentBufAst,
   getCurrentBufCode,
 } from "./utils.ts";
@@ -141,5 +142,52 @@ Deno.test("byteIndexToCharIndex", async (t) => {
 
     // End at 6 bytes -> 4 chars
     assertEquals(byteIndexToCharIndex(str, 6), 4);
+  });
+});
+
+Deno.test("getCharIndexFromLineCol", async (t) => {
+  await t.step("Single line", () => {
+    const code = "hello world";
+    // line 1, col 1 ('h') -> 0
+    assertEquals(getCharIndexFromLineCol(code, 1, 1), 0);
+    // line 1, col 7 ('w') -> 6
+    assertEquals(getCharIndexFromLineCol(code, 1, 7), 6);
+  });
+
+  await t.step("Multiple lines", () => {
+    const code = "foo\nbar\nbaz";
+    // line 1: foo (3 chars) + \n (1) = 4
+    // line 2: bar (3 chars) + \n (1) = 4
+    // line 3: baz
+
+    // line 1, col 1 ('f') -> 0
+    assertEquals(getCharIndexFromLineCol(code, 1, 1), 0);
+
+    // line 2, col 1 ('b') -> 4
+    assertEquals(getCharIndexFromLineCol(code, 2, 1), 4);
+
+    // line 3, col 2 ('a') -> 4 + 4 + 1 = 9
+    assertEquals(getCharIndexFromLineCol(code, 3, 2), 9);
+  });
+
+  await t.step("With multibyte characters", () => {
+    // '★' is 3 bytes (U+2605)
+    const code = "a\n★b";
+    // line 1: 'a' (1) + \n (1) = 2 chars
+    // line 2 starts at index 2.
+
+    // line 2, col 1 ('★') -> 2
+    assertEquals(getCharIndexFromLineCol(code, 2, 1), 2);
+
+    // line 2, col 4 ('b') -> 1 + 3 bytes = 4 bytes.
+    // char index: 2 (start) + 1 (byteIndexToCharIndex('★b', 3) = 1 char offset) = 3
+    assertEquals(getCharIndexFromLineCol(code, 2, 4), 3);
+  });
+
+  await t.step("Out of bounds line", () => {
+    const code = "foo\nbar";
+    assertThrows(() => {
+      getCharIndexFromLineCol(code, 3, 1);
+    }, Error, "Line number 3 out of bounds");
   });
 });

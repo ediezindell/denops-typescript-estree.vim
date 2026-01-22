@@ -3,7 +3,7 @@ import { Denops } from "jsr:@denops/std";
 import * as fn from "jsr:@denops/std/function";
 
 import {
-  byteIndexToCharIndex,
+  getCharIndexFromLineCol,
   getCurrentBufAst,
   getCurrentBufCode,
 } from "../lib/utils.ts";
@@ -20,25 +20,7 @@ export default class Inspecter {
     const [, line, col] = await fn.getcurpos(this.#denops);
     const code = await getCurrentBufCode(this.#denops);
 
-    // Convert 1-based line/column to 0-based character position
-    const lines = code.split("\n");
-    let pos = 0;
-
-    // Add characters for all lines before current line
-    for (let i = 0; i < line - 1; i++) {
-      // +1 for newline character
-      pos += lines[i].length + 1;
-    }
-
-    // Add characters for columns in current line (col is 1-based byte index)
-    if (lines[line - 1]) {
-      const currentLine = lines[line - 1];
-      // col is 1-based byte index, so col-1 is 0-based byte index
-      const charOffset = byteIndexToCharIndex(currentLine, col - 1);
-      pos += charOffset;
-    }
-
-    return pos;
+    return getCharIndexFromLineCol(code, line, col);
   };
 
   inspect = async () => {
