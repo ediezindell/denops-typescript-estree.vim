@@ -8,7 +8,7 @@ import { parseToAst } from "../lib/ast.ts";
 
 type AstRoot = NonNullable<ReturnType<typeof parseToAst>>;
 
-type CacheEntry = {
+export type CacheEntry = {
   bufnr: number;
   tick: number;
   code: string;
@@ -28,17 +28,21 @@ const computeLineStartIndicesFromLines = (lines: string[]): number[] => {
   return indices;
 };
 
-export const getCurrentBufCode = async (denops: Denops) => {
-  // Optimization: Fetch bufnr and changedtick in a single RPC call
-  const [bufnr, tick] = await collect(denops, (denops) => [
-    fn.bufnr(denops),
-    fn.getbufvar(denops, "%", "changedtick"),
-  ]) as [number, number];
-
+export const checkCache = (
+  bufnr: number,
+  tick: number,
+): CacheEntry | null => {
   if (astCache && astCache.bufnr === bufnr && astCache.tick === tick) {
-    return astCache.code;
+    return astCache;
   }
+  return null;
+};
 
+export const fetchBufState = async (
+  denops: Denops,
+  bufnr: number,
+  tick: number,
+): Promise<CacheEntry> => {
   const buflines = await fn.getbufline(denops, bufnr, 1, "$");
   assert(buflines, is.ArrayOf(is.String));
   const code = buflines.join("\n");
@@ -46,8 +50,33 @@ export const getCurrentBufCode = async (denops: Denops) => {
 
   // Update cache (clearing AST as code changed or it's a new entry)
   astCache = { bufnr, tick, code, lineStartIndices };
+  return astCache;
+};
 
-  return code;
+export const updateCacheAst = (
+  bufnr: number,
+  tick: number,
+  ast: AstRoot,
+): void => {
+  if (astCache && astCache.bufnr === bufnr && astCache.tick === tick) {
+    astCache.ast = ast;
+  }
+};
+
+export const getCurrentBufCode = async (denops: Denops) => {
+  // Optimization: Fetch bufnr and changedtick in a single RPC call
+  const [bufnr, tick] = await collect(denops, (denops) => [
+    fn.bufnr(denops),
+    fn.getbufvar(denops, "%", "changedtick"),
+  ]) as [number, number];
+
+  const cache = checkCache(bufnr, tick);
+  if (cache) {
+    return cache.code;
+  }
+
+  const newCache = await fetchBufState(denops, bufnr, tick);
+  return newCache.code;
 };
 
 export const getCurrentBufAst = async (denops: Denops) => {
@@ -58,32 +87,25 @@ export const getCurrentBufAst = async (denops: Denops) => {
       fn.getbufvar(denops, "%", "changedtick"),
     ]) as [number, number];
 
-    if (astCache && astCache.bufnr === bufnr && astCache.tick === tick) {
-      if (astCache.ast) {
-        return astCache.ast;
-      }
-      // AST missing but code cached
-      const ast = parseToAst(astCache.code);
-      if (ast) {
-        astCache.ast = ast as AstRoot;
-      }
-      return ast;
+    let cache = checkCache(bufnr, tick);
+
+    if (!cache) {
+      cache = await fetchBufState(denops, bufnr, tick);
     }
 
-    const buflines = await fn.getbufline(denops, bufnr, 1, "$");
-    assert(buflines, is.ArrayOf(is.String));
-    const code = buflines.join("\n");
+    if (cache.ast) {
+      return cache.ast;
+    }
 
+    const code = cache.code;
     if (!code.trim()) {
       console.warn("Buffer is empty");
       return null;
     }
 
     const ast = parseToAst(code);
-    const lineStartIndices = computeLineStartIndicesFromLines(buflines);
-
     if (ast) {
-      astCache = { bufnr, tick, ast: ast as AstRoot, code, lineStartIndices };
+      updateCacheAst(bufnr, tick, ast as AstRoot);
     }
     return ast;
   } catch (error) {
@@ -98,17 +120,13 @@ export const getLineStartIndices = async (denops: Denops) => {
     fn.getbufvar(denops, "%", "changedtick"),
   ]) as [number, number];
 
-  if (astCache && astCache.bufnr === bufnr && astCache.tick === tick) {
-    return astCache.lineStartIndices;
+  const cache = checkCache(bufnr, tick);
+  if (cache) {
+    return cache.lineStartIndices;
   }
 
-  // Cache miss, call getCurrentBufCode to populate cache
-  await getCurrentBufCode(denops);
-
-  if (astCache && astCache.bufnr === bufnr && astCache.tick === tick) {
-    return astCache.lineStartIndices;
-  }
-  return null;
+  const newCache = await fetchBufState(denops, bufnr, tick);
+  return newCache.lineStartIndices;
 };
 
 export const getSourceFilePath = async (denops: Denops) => {

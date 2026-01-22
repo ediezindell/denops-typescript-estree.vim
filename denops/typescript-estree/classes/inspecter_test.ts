@@ -36,8 +36,12 @@ class MockDenops implements Denops {
 
   // deno-lint-ignore require-await
   async batch(...calls: [string, ...unknown[]][]): Promise<unknown[]> {
-     this.batchCalls.push(...calls);
-     return calls.map(() => null);
+    this.batchCalls.push(...calls);
+    const results = [];
+    for (const [fn, ...args] of calls) {
+      results.push(await this.call(fn, ...args));
+    }
+    return results;
   }
 
   redraw = (_force?: boolean) => Promise.resolve();
