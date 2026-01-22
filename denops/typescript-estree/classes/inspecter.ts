@@ -21,18 +21,26 @@ export default class Inspecter {
     const code = await getCurrentBufCode(this.#denops);
 
     // Convert 1-based line/column to 0-based character position
-    const lines = code.split("\n");
     let pos = 0;
 
     // Add characters for all lines before current line
+    // Find the start index of the current line (0-based index)
     for (let i = 0; i < line - 1; i++) {
-      // +1 for newline character
-      pos += lines[i].length + 1;
+      const nextNewline = code.indexOf("\n", pos);
+      if (nextNewline === -1) {
+        pos = code.length;
+        break;
+      }
+      pos = nextNewline + 1;
     }
 
     // Add characters for columns in current line (col is 1-based byte index)
-    if (lines[line - 1]) {
-      const currentLine = lines[line - 1];
+    // Extract current line for byteIndexToCharIndex
+    if (pos <= code.length) {
+      const nextNewline = code.indexOf("\n", pos);
+      const lineEnd = nextNewline === -1 ? code.length : nextNewline;
+      const currentLine = code.slice(pos, lineEnd);
+
       // col is 1-based byte index, so col-1 is 0-based byte index
       const charOffset = byteIndexToCharIndex(currentLine, col - 1);
       pos += charOffset;
