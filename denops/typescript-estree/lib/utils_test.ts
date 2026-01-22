@@ -1,9 +1,10 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
-import { assertEquals } from "jsr:@std/assert";
+import { assert, assertEquals } from "jsr:@std/assert";
 import {
   byteIndexToCharIndex,
   getCurrentBufAst,
   getCurrentBufCode,
+  getLineStartIndices,
 } from "./utils.ts";
 import type { Denops } from "jsr:@denops/std";
 
@@ -142,4 +143,91 @@ Deno.test("byteIndexToCharIndex", async (t) => {
     // End at 6 bytes -> 4 chars
     assertEquals(byteIndexToCharIndex(str, 6), 4);
   });
+});
+
+Deno.test("getLineStartIndices returns correct indices", async () => {
+  let getBufLineCallCount = 0;
+  const currentTick = 300;
+
+  const handleCall = (name: string, ...args: unknown[]) => {
+    if (name === "bufnr") return 1;
+    if (name === "getbufline") {
+      getBufLineCallCount++;
+      return ["line1", "line2", "line3"];
+    }
+    if (name === "getbufvar") {
+      if (args[1] === "changedtick") {
+        return currentTick;
+      }
+    }
+    return null;
+  };
+
+  const mockDenops = {
+    name: "mock-denops",
+    call: handleCall,
+    cmd: (_cmd: string) => Promise.resolve(),
+    eval: (_expr: string) => Promise.resolve(),
+    batch: (...calls: [string, ...unknown[]][]) => {
+      return Promise.all(
+        calls.map(([name, ...args]) => handleCall(name, ...args)),
+      );
+    },
+  } as unknown as Denops;
+
+  const indices = await getLineStartIndices(mockDenops);
+  // line1 (5) + \n (1) = 6
+  // line2 (5) + \n (1) = 6
+  // line3 (5)
+  // Indices:
+  // line1: 0
+  // line2: 0 + 6 = 6
+  // line3: 6 + 6 = 12
+  assertEquals(indices, [0, 6, 12]);
+  assertEquals(getBufLineCallCount, 1);
+
+  // Test cache usage
+  await getLineStartIndices(mockDenops);
+  assertEquals(getBufLineCallCount, 1);
+});
+
+Deno.test("getCurrentBufCode populates cache for getCurrentBufAst", async () => {
+  let getBufLineCallCount = 0;
+  const currentTick = 400;
+
+  const handleCall = (name: string, ...args: unknown[]) => {
+    if (name === "bufnr") return 1;
+    if (name === "getbufline") {
+      getBufLineCallCount++;
+      return ["const c = 3;"];
+    }
+    if (name === "getbufvar") {
+      if (args[1] === "changedtick") {
+        return currentTick;
+      }
+    }
+    return null;
+  };
+
+  const mockDenops = {
+    name: "mock-denops",
+    call: handleCall,
+    cmd: (_cmd: string) => Promise.resolve(),
+    eval: (_expr: string) => Promise.resolve(),
+    batch: (...calls: [string, ...unknown[]][]) => {
+      return Promise.all(
+        calls.map(([name, ...args]) => handleCall(name, ...args)),
+      );
+    },
+  } as unknown as Denops;
+
+  // 1. call getCurrentBufCode first
+  await getCurrentBufCode(mockDenops);
+  assertEquals(getBufLineCallCount, 1);
+
+  // 2. call getCurrentBufAst
+  // Should use cached code and parse AST without fetching buffer again
+  const ast = await getCurrentBufAst(mockDenops);
+  assertEquals(getBufLineCallCount, 1, "Should reuse code from cache");
+  assert(ast !== null);
 });
