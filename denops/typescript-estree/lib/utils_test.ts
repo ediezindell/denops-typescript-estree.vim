@@ -11,25 +11,29 @@ Deno.test("getCurrentBufAst caches AST based on changedtick", async () => {
   let getBufLineCallCount = 0;
   let currentTick = 100;
 
+  const handleCall = (name: string, ...args: unknown[]) => {
+    if (name === "bufnr") return 1;
+    if (name === "getbufline") {
+      getBufLineCallCount++;
+      return ["const a = 1;"];
+    }
+    if (name === "getbufvar") {
+      // args[0] is bufnr or "%", args[1] is varname
+      if (args[1] === "changedtick") {
+        return currentTick;
+      }
+    }
+    return null;
+  };
+
   const mockDenops = {
     name: "mock-denops",
-    call: (name: string, ...args: unknown[]) => {
-      if (name === "bufnr") return 1;
-      if (name === "getbufline") {
-        getBufLineCallCount++;
-        return ["const a = 1;"];
-      }
-      if (name === "getbufvar") {
-        // args[0] is bufnr, args[1] is varname
-        if (args[1] === "changedtick") {
-          return currentTick;
-        }
-      }
-      return null;
-    },
+    call: handleCall,
     cmd: (_cmd: string) => Promise.resolve(),
     eval: (_expr: string) => Promise.resolve(),
-    batch: (_calls: unknown[]) => Promise.resolve(),
+    batch: (...calls: [string, ...unknown[]][]) => {
+      return Promise.all(calls.map(([name, ...args]) => handleCall(name, ...args)));
+    },
   } as unknown as Denops;
 
   // 1. First call - should fetch buffer
@@ -51,24 +55,28 @@ Deno.test("getCurrentBufCode uses cached code from getCurrentBufAst", async () =
   let getBufLineCallCount = 0;
   const currentTick = 200;
 
+  const handleCall = (name: string, ...args: unknown[]) => {
+    if (name === "bufnr") return 1;
+    if (name === "getbufline") {
+      getBufLineCallCount++;
+      return ["const b = 2;"];
+    }
+    if (name === "getbufvar") {
+      if (args[1] === "changedtick") {
+        return currentTick;
+      }
+    }
+    return null;
+  };
+
   const mockDenops = {
     name: "mock-denops",
-    call: (name: string, ...args: unknown[]) => {
-      if (name === "bufnr") return 1;
-      if (name === "getbufline") {
-        getBufLineCallCount++;
-        return ["const b = 2;"];
-      }
-      if (name === "getbufvar") {
-        if (args[1] === "changedtick") {
-          return currentTick;
-        }
-      }
-      return null;
-    },
+    call: handleCall,
     cmd: (_cmd: string) => Promise.resolve(),
     eval: (_expr: string) => Promise.resolve(),
-    batch: (_calls: unknown[]) => Promise.resolve(),
+    batch: (...calls: [string, ...unknown[]][]) => {
+      return Promise.all(calls.map(([name, ...args]) => handleCall(name, ...args)));
+    },
   } as unknown as Denops;
 
   // 1. First, populate cache with getCurrentBufAst

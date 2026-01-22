@@ -2,6 +2,7 @@
 import type { Denops } from "jsr:@denops/std";
 import * as fn from "jsr:@denops/std/function";
 import { assert, is } from "jsr:@core/unknownutil";
+import { collect } from "jsr:@denops/std/batch";
 
 import { parseToAst } from "../lib/ast.ts";
 
@@ -11,8 +12,11 @@ let astCache: { bufnr: number; tick: number; ast: AstRoot; code: string } | null
   null;
 
 export const getCurrentBufCode = async (denops: Denops) => {
-  const bufnr = await fn.bufnr(denops);
-  const tick = await fn.getbufvar(denops, bufnr, "changedtick") as number;
+  // Optimization: Fetch bufnr and changedtick in a single RPC call
+  const [bufnr, tick] = await collect(denops, (denops) => [
+    fn.bufnr(denops),
+    fn.getbufvar(denops, "%", "changedtick"),
+  ]) as [number, number];
 
   if (astCache && astCache.bufnr === bufnr && astCache.tick === tick) {
     return astCache.code;
@@ -26,8 +30,11 @@ export const getCurrentBufCode = async (denops: Denops) => {
 
 export const getCurrentBufAst = async (denops: Denops) => {
   try {
-    const bufnr = await fn.bufnr(denops);
-    const tick = await fn.getbufvar(denops, bufnr, "changedtick") as number;
+    // Optimization: Fetch bufnr and changedtick in a single RPC call
+    const [bufnr, tick] = await collect(denops, (denops) => [
+      fn.bufnr(denops),
+      fn.getbufvar(denops, "%", "changedtick"),
+    ]) as [number, number];
 
     if (astCache && astCache.bufnr === bufnr && astCache.tick === tick) {
       return astCache.ast;
