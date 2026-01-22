@@ -127,14 +127,21 @@ export const byteIndexToCharIndex = (
 ): number => {
   let byteCount = 0;
   let charIndex = 0;
+  const len = str.length;
 
-  while (charIndex < str.length && byteCount < targetByteIndex) {
+  while (charIndex < len && byteCount < targetByteIndex) {
     const code = str.charCodeAt(charIndex);
+
+    // Fast path for ASCII
+    if (code < 0x80) {
+      byteCount += 1;
+      charIndex++;
+      continue;
+    }
+
     let nextStep = 1;
 
-    if (code < 0x80) {
-      nextStep = 1;
-    } else if (code < 0x800) {
+    if (code < 0x800) {
       nextStep = 2;
     } else if (code < 0xd800 || code >= 0xe000) {
       nextStep = 3;

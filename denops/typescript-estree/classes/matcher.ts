@@ -71,15 +71,20 @@ export default class Matcher {
     }
 
     // Filter nodes with location
-    const nodesWithLoc = matchingNodes.filter(({ loc }) => loc);
+    const nodesWithLoc: typeof matchingNodes = [];
+    this.#pos = [];
 
-    this.#pos = nodesWithLoc
-      .map(({ loc }) => loc!)
-      .map(({ start, end }) => [
+    for (const node of matchingNodes) {
+      if (!node.loc) continue;
+
+      nodesWithLoc.push(node);
+      const { start, end } = node.loc;
+      this.#pos.push([
         start.line,
         start.column + 1, // Convert 0-based to 1-based column
         Math.max(1, end.column - start.column), // Ensure minimum length of 1
       ]);
+    }
 
     // Sort positions for navigation
     this.#pos.sort((a, b) => {
