@@ -9,3 +9,7 @@
 ## 2025-05-22 - Optimizing buffer access in Denops
 **Learning:** In Denops plugins, fetching buffer content (`getbufline`) is expensive due to RPC overhead and data transfer. Caching buffer content alongside ASTs using `changedtick` allows verifying cache validity cheaply (one integer RPC) and avoiding large transfers.
 **Action:** When working with Denops, always look for opportunities to cache buffer state using `changedtick`, especially for operations that read the whole buffer.
+
+## 2025-05-22 - Caching derived text metrics
+**Learning:** Repeatedly calculating text metrics (like line offsets) from a large buffer string is expensive (O(N) or O(L*N)). Caching these metrics alongside the buffer content allows O(1) lookups during cursor movement or inspection.
+**Action:** Compute and cache line start indices (or other structural metrics) when the buffer content is updated/cached.

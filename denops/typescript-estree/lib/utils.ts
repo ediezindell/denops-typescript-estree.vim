@@ -8,8 +8,25 @@ import { parseToAst } from "../lib/ast.ts";
 
 type AstRoot = NonNullable<ReturnType<typeof parseToAst>>;
 
-let astCache: { bufnr: number; tick: number; ast: AstRoot; code: string } | null =
-  null;
+type CacheEntry = {
+  bufnr: number;
+  tick: number;
+  code: string;
+  ast?: AstRoot;
+  lineStartIndices: number[];
+};
+
+let astCache: CacheEntry | null = null;
+
+const computeLineStartIndicesFromLines = (lines: string[]): number[] => {
+  const indices = [0];
+  let current = 0;
+  for (let i = 0; i < lines.length - 1; i++) {
+    current += lines[i].length + 1; // +1 for \n
+    indices.push(current);
+  }
+  return indices;
+};
 
 export const getCurrentBufCode = async (denops: Denops) => {
   // Optimization: Fetch bufnr and changedtick in a single RPC call
@@ -24,8 +41,13 @@ export const getCurrentBufCode = async (denops: Denops) => {
 
   const buflines = await fn.getbufline(denops, bufnr, 1, "$");
   assert(buflines, is.ArrayOf(is.String));
+  const code = buflines.join("\n");
+  const lineStartIndices = computeLineStartIndicesFromLines(buflines);
 
-  return buflines.join("\n");
+  // Update cache (clearing AST as code changed or it's a new entry)
+  astCache = { bufnr, tick, code, lineStartIndices };
+
+  return code;
 };
 
 export const getCurrentBufAst = async (denops: Denops) => {
@@ -37,7 +59,15 @@ export const getCurrentBufAst = async (denops: Denops) => {
     ]) as [number, number];
 
     if (astCache && astCache.bufnr === bufnr && astCache.tick === tick) {
-      return astCache.ast;
+      if (astCache.ast) {
+        return astCache.ast;
+      }
+      // AST missing but code cached
+      const ast = parseToAst(astCache.code);
+      if (ast) {
+        astCache.ast = ast as AstRoot;
+      }
+      return ast;
     }
 
     const buflines = await fn.getbufline(denops, bufnr, 1, "$");
@@ -48,15 +78,37 @@ export const getCurrentBufAst = async (denops: Denops) => {
       console.warn("Buffer is empty");
       return null;
     }
+
     const ast = parseToAst(code);
+    const lineStartIndices = computeLineStartIndicesFromLines(buflines);
+
     if (ast) {
-      astCache = { bufnr, tick, ast: ast as AstRoot, code };
+      astCache = { bufnr, tick, ast: ast as AstRoot, code, lineStartIndices };
     }
     return ast;
   } catch (error) {
     console.error("Failed to get current buffer AST:", error);
     return null;
   }
+};
+
+export const getLineStartIndices = async (denops: Denops) => {
+  const [bufnr, tick] = await collect(denops, (denops) => [
+    fn.bufnr(denops),
+    fn.getbufvar(denops, "%", "changedtick"),
+  ]) as [number, number];
+
+  if (astCache && astCache.bufnr === bufnr && astCache.tick === tick) {
+    return astCache.lineStartIndices;
+  }
+
+  // Cache miss, call getCurrentBufCode to populate cache
+  await getCurrentBufCode(denops);
+
+  if (astCache && astCache.bufnr === bufnr && astCache.tick === tick) {
+    return astCache.lineStartIndices;
+  }
+  return null;
 };
 
 export const getSourceFilePath = async (denops: Denops) => {
