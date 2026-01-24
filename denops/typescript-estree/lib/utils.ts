@@ -63,7 +63,7 @@ export const updateCacheAst = (
   }
 };
 
-export const getCurrentBufCode = async (denops: Denops) => {
+const ensureBufState = async (denops: Denops): Promise<CacheEntry> => {
   // Optimization: Fetch bufnr and changedtick in a single RPC call
   const [bufnr, tick] = await collect(denops, (denops) => [
     fn.bufnr(denops),
@@ -72,26 +72,20 @@ export const getCurrentBufCode = async (denops: Denops) => {
 
   const cache = checkCache(bufnr, tick);
   if (cache) {
-    return cache.code;
+    return cache;
   }
 
-  const newCache = await fetchBufState(denops, bufnr, tick);
-  return newCache.code;
+  return await fetchBufState(denops, bufnr, tick);
+};
+
+export const getCurrentBufCode = async (denops: Denops) => {
+  const cache = await ensureBufState(denops);
+  return cache.code;
 };
 
 export const getCurrentBufAst = async (denops: Denops) => {
   try {
-    // Optimization: Fetch bufnr and changedtick in a single RPC call
-    const [bufnr, tick] = await collect(denops, (denops) => [
-      fn.bufnr(denops),
-      fn.getbufvar(denops, "%", "changedtick"),
-    ]) as [number, number];
-
-    let cache = checkCache(bufnr, tick);
-
-    if (!cache) {
-      cache = await fetchBufState(denops, bufnr, tick);
-    }
+    const cache = await ensureBufState(denops);
 
     if (cache.ast) {
       return cache.ast;
@@ -105,7 +99,7 @@ export const getCurrentBufAst = async (denops: Denops) => {
 
     const ast = parseToAst(code);
     if (ast) {
-      updateCacheAst(bufnr, tick, ast as AstRoot);
+      updateCacheAst(cache.bufnr, cache.tick, ast as AstRoot);
     }
     return ast;
   } catch (error) {
@@ -115,18 +109,8 @@ export const getCurrentBufAst = async (denops: Denops) => {
 };
 
 export const getLineStartIndices = async (denops: Denops) => {
-  const [bufnr, tick] = await collect(denops, (denops) => [
-    fn.bufnr(denops),
-    fn.getbufvar(denops, "%", "changedtick"),
-  ]) as [number, number];
-
-  const cache = checkCache(bufnr, tick);
-  if (cache) {
-    return cache.lineStartIndices;
-  }
-
-  const newCache = await fetchBufState(denops, bufnr, tick);
-  return newCache.lineStartIndices;
+  const cache = await ensureBufState(denops);
+  return cache.lineStartIndices;
 };
 
 export const getSourceFilePath = async (denops: Denops) => {
