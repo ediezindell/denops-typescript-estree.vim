@@ -5,11 +5,10 @@ import { collect } from "jsr:@denops/std/batch";
 
 import {
   byteIndexToCharIndex,
-  checkCache,
-  fetchBufState,
-  updateCacheAst,
+  getOrFetchBufState,
+  getOrParseAst,
 } from "../lib/utils.ts";
-import { findNodesAtPosition, parseToAst } from "../lib/ast.ts";
+import { findNodesAtPosition } from "../lib/ast.ts";
 
 export default class Inspecter {
   #denops: Denops;
@@ -64,30 +63,15 @@ export default class Inspecter {
         fn.getcurpos(denops),
       ]) as [number, number, [number, number, number, number, number]];
 
-      let state = checkCache(bufnr, tick);
-      if (!state) {
-        state = await fetchBufState(this.#denops, bufnr, tick);
-      }
-
-      let ast = state.ast;
-      if (!ast) {
-        if (!state.code.trim()) {
-          await this.#denops.cmd(
-            `echohl WarningMsg | echo "Buffer is empty" | echohl None`,
-          );
-          return;
-        }
-        // Parse AST if missing
-        const newAst = parseToAst(state.code);
-        if (newAst) {
-          updateCacheAst(bufnr, tick, newAst);
-          ast = newAst;
-        }
-      }
+      const state = await getOrFetchBufState(this.#denops, bufnr, tick);
+      const ast = getOrParseAst(state);
 
       if (!ast) {
+        const message = !state.code.trim()
+          ? "Buffer is empty"
+          : "Failed to parse current buffer";
         await this.#denops.cmd(
-          `echohl WarningMsg | echo "Failed to parse current buffer" | echohl None`,
+          `echohl WarningMsg | echo "${message}" | echohl None`,
         );
         return;
       }

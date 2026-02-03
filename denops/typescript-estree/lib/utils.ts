@@ -63,13 +63,14 @@ export const updateCacheAst = (
   }
 };
 
-const ensureBufState = async (denops: Denops): Promise<CacheEntry> => {
-  // Optimization: Fetch bufnr and changedtick in a single RPC call
-  const [bufnr, tick] = await collect(denops, (denops) => [
-    fn.bufnr(denops),
-    fn.getbufvar(denops, "%", "changedtick"),
-  ]) as [number, number];
-
+/**
+ * Returns cached buffer state or fetches it if not present/outdated.
+ */
+export const getOrFetchBufState = async (
+  denops: Denops,
+  bufnr: number,
+  tick: number,
+): Promise<CacheEntry> => {
   const cache = checkCache(bufnr, tick);
   if (cache) {
     return cache;
@@ -78,28 +79,46 @@ const ensureBufState = async (denops: Denops): Promise<CacheEntry> => {
   return await fetchBufState(denops, bufnr, tick);
 };
 
+const ensureBufState = async (denops: Denops): Promise<CacheEntry> => {
+  // Optimization: Fetch bufnr and changedtick in a single RPC call
+  const [bufnr, tick] = await collect(denops, (denops) => [
+    fn.bufnr(denops),
+    fn.getbufvar(denops, "%", "changedtick"),
+  ]) as [number, number];
+
+  return await getOrFetchBufState(denops, bufnr, tick);
+};
+
 export const getCurrentBufCode = async (denops: Denops) => {
   const cache = await ensureBufState(denops);
   return cache.code;
 };
 
+/**
+ * Returns cached AST or parses it if missing.
+ */
+export const getOrParseAst = (state: CacheEntry): AstRoot | null => {
+  if (state.ast) {
+    return state.ast;
+  }
+
+  if (!state.code.trim()) {
+    return null;
+  }
+
+  const ast = parseToAst(state.code);
+  if (ast) {
+    updateCacheAst(state.bufnr, state.tick, ast as AstRoot);
+  }
+  return ast;
+};
+
 export const getCurrentBufAst = async (denops: Denops) => {
   try {
     const cache = await ensureBufState(denops);
-
-    if (cache.ast) {
-      return cache.ast;
-    }
-
-    const code = cache.code;
-    if (!code.trim()) {
+    const ast = getOrParseAst(cache);
+    if (!ast && !cache.code.trim()) {
       console.warn("Buffer is empty");
-      return null;
-    }
-
-    const ast = parseToAst(code);
-    if (ast) {
-      updateCacheAst(cache.bufnr, cache.tick, ast as AstRoot);
     }
     return ast;
   } catch (error) {
